@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
+import 'package:cross_file/cross_file.dart';
 import 'package:http/http.dart' as http;
 
 import 'models.dart';
@@ -100,16 +100,21 @@ class ApiClient {
   );
 
   /// Multipart form POST (handover confirm with photo, bank deposit with slip).
-  Future<dynamic> multipart(String path, {required Map<String, String> fields, required Map<String, File> files}) {
+  Future<dynamic> multipart(String path, {required Map<String, String> fields, required Map<String, XFile> files}) {
     return _send(() async {
       final req = http.MultipartRequest('POST', uri(path));
       req.headers.addAll(_headers);
       req.fields.addAll(fields);
       for (final e in files.entries) {
-        req.files.add(await http.MultipartFile.fromPath(e.key, e.value.path, filename: e.value.uri.pathSegments.last));
+        req.files.add(http.MultipartFile.fromBytes(e.key, await e.value.readAsBytes(), filename: _fileName(e.value)));
       }
       return http.Response.fromStream(await _http.send(req));
     }, const Duration(seconds: 60));
+  }
+
+  static String _fileName(XFile f) {
+    final n = f.name.isNotEmpty ? f.name : f.path.split('/').last;
+    return n.contains('.') ? n : '$n.jpg';
   }
 
   Future<dynamic> _send(Future<http.Response> Function() fn, Duration? t) async {
@@ -119,13 +124,8 @@ class ApiClient {
     } on TimeoutException {
       onReachability?.call(false);
       throw NetworkException('timed out');
-    } on SocketException catch (e) {
-      onReachability?.call(false);
-      throw NetworkException(e.message);
     } on http.ClientException catch (e) {
-      onReachability?.call(false);
-      throw NetworkException(e.message);
-    } on HandshakeException catch (e) {
+      // socket / TLS / browser fetch failures all surface as ClientException
       onReachability?.call(false);
       throw NetworkException(e.message);
     }
@@ -199,6 +199,9 @@ class ApiClient {
 
   Future<PaymentInfo> payCash(Map<String, dynamic> body) async =>
       PaymentInfo(Map<String, dynamic>.from(await post('/api/payments/cash', body)));
+
+  /// Demo servers only: the (mock) customer completes the UPI payment.
+  Future<void> demoPay(int id) async => post('/api/demo/pay/$id');
 
   Future<PaymentInfo> payment(int id) async => PaymentInfo(Map<String, dynamic>.from(await get('/api/payments/$id')));
 
@@ -274,21 +277,22 @@ class ApiClient {
           .map((e) => HandoverInfo(Map<String, dynamic>.from(e)))
           .toList();
 
-  Future<HandoverInfo> confirmHandover(int id, Map<int, int> counted, File photo, {String? note}) async => HandoverInfo(
-    Map<String, dynamic>.from(
-      await multipart(
-        '/api/cash/handovers/$id/confirm',
-        fields: {
-          'counted_denominations': jsonEncode({
-            for (final e in counted.entries)
-              if (e.value > 0) '${e.key}': e.value,
-          }),
-          if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
-        },
-        files: {'photo': photo},
-      ),
-    ),
-  );
+  Future<HandoverInfo> confirmHandover(int id, Map<int, int> counted, XFile photo, {String? note}) async =>
+      HandoverInfo(
+        Map<String, dynamic>.from(
+          await multipart(
+            '/api/cash/handovers/$id/confirm',
+            fields: {
+              'counted_denominations': jsonEncode({
+                for (final e in counted.entries)
+                  if (e.value > 0) '${e.key}': e.value,
+              }),
+              if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+            },
+            files: {'photo': photo},
+          ),
+        ),
+      );
 
   Future<HandoverInfo> rejectHandover(int id, String note) async =>
       HandoverInfo(Map<String, dynamic>.from(await post('/api/cash/handovers/$id/reject', {'note': note})));
@@ -297,7 +301,7 @@ class ApiClient {
     required String businessDate,
     required int amountPaise,
     required String slipRef,
-    required File slipPhoto,
+    required XFile slipPhoto,
     String? note,
   }) async => Map<String, dynamic>.from(
     await multipart(

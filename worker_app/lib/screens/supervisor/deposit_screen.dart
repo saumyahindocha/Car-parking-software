@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -23,7 +21,8 @@ class _DepositScreenState extends State<DepositScreen> {
   final _amount = TextEditingController();
   final _slip = TextEditingController();
   final _note = TextEditingController();
-  File? _photo;
+  XFile? _photo;
+  Uint8List? _photoBytes;
   bool _busy = false;
   List<dynamic>? _recent;
 
@@ -50,7 +49,13 @@ class _DepositScreenState extends State<DepositScreen> {
   Future<void> _photoSlip() async {
     try {
       final x = await ImagePicker().pickImage(source: ImageSource.camera, maxWidth: 1800, imageQuality: 85);
-      if (x != null) setState(() => _photo = File(x.path));
+      if (x != null) {
+        final bytes = await x.readAsBytes();
+        setState(() {
+          _photo = x;
+          _photoBytes = bytes;
+        });
+      }
     } catch (e) {
       if (mounted) showSnack(context, 'Camera unavailable: $e', error: true);
     }
@@ -81,6 +86,7 @@ class _DepositScreenState extends State<DepositScreen> {
         _slip.clear();
         _note.clear();
         _photo = null;
+        _photoBytes = null;
       });
       await _loadRecent();
     } catch (e) {
@@ -137,7 +143,7 @@ class _DepositScreenState extends State<DepositScreen> {
           if (_photo != null)
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
-              child: Image.file(_photo!, height: 200, fit: BoxFit.cover),
+              child: Image.memory(_photoBytes!, height: 200, fit: BoxFit.cover),
             ),
           OutlinedButton.icon(
             onPressed: _photoSlip,

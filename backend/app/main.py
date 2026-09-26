@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import mimetypes
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import domain  # noqa: F401  registers audit + event hooks
@@ -118,6 +119,16 @@ async def ws_device(ws: WebSocket, key: str = "", gate_id: str = ""):
     await ws.accept()
     await hub.serve(Client(ws=ws, role="DEVICE", gate_id=gate_id or None))
 
+
+# ------------------------------------------------------------------ phone app (browser build) at /app/
+mimetypes.add_type("application/wasm", ".wasm")
+_worker_web = Path(get_settings().worker_web_dist)
+if (_worker_web / "index.html").is_file():
+    @app.get("/app", include_in_schema=False)
+    async def _app_redirect():
+        return RedirectResponse("/app/")
+
+    app.mount("/app", StaticFiles(directory=_worker_web, html=True), name="worker_app")
 
 # ------------------------------------------------------------------ dashboard SPA
 _dist = Path(get_settings().dashboard_dist)

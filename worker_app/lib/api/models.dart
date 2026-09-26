@@ -134,6 +134,7 @@ class Bootstrap {
       zones = _l(raw['zones']).map((e) => ZoneInfo.fromJson(_m(e))).toList(),
       settings = SiteSettings(_m(raw['settings'])),
       cashAllowed = raw['cash_allowed'] != false,
+      demoMode = raw['demo_mode'] == true,
       tariffs = _l(raw['tariffs']).map((e) => Tariff.fromJson(_m(e))).toList(),
       passTypes = _l(raw['pass_types']).map((e) => PassTypeInfo.fromJson(_m(e))).toList(),
       gates = {for (final g in _l(raw['gates'])) _s(_m(g)['id']) ?? '': _s(_m(g)['name']) ?? ''},
@@ -147,6 +148,9 @@ class Bootstrap {
   final List<ZoneInfo> zones;
   final SiteSettings settings;
   final bool cashAllowed;
+
+  /// Demo server (mock payment gateway): the app offers "Simulate customer paying".
+  final bool demoMode;
   final List<Tariff> tariffs;
   final List<PassTypeInfo> passTypes;
   final Map<String, String> gates;

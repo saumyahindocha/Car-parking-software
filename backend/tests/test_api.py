@@ -37,8 +37,10 @@ def anpr(c, direction, plate, gate):
 def test_full_worker_flow(client):
     c = client
     assert c.post("/api/anpr/events", json={}, headers={"X-Device-Key": "wrong"}).status_code == 401
+    get_settings().demo_mode = False  # production: worker accounts are bound to one phone
     w = login(c, "w1", pin="1111", device_id="phone-1")
     assert c.post("/api/auth/login", json={"username": "w1", "pin": "1111", "device_id": "phone-2"}).status_code == 403
+    get_settings().demo_mode = True
     boot = c.get("/api/bootstrap", headers=w).json()
     assert boot["tariffs"] and boot["settings"]["duration_buttons"]
     ev = anpr(c, "IN", "MH43AB1234", "G1")

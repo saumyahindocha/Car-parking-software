@@ -46,7 +46,9 @@ def login(body: LoginIn, db: Session = Depends(get_db)):
         (body.pin and verify_secret(body.pin, u.pin_hash)))
     if not ok:
         raise HTTPException(401, "invalid credentials")
-    if u.role in (Role.WORKER, Role.GUARD, Role.SUPERVISOR) and body.device_id:
+    if get_settings().demo_mode:
+        pass  # demo: no phone binding (Safari and the iPhone home-screen app have separate storage)
+    elif u.role in (Role.WORKER, Role.GUARD, Role.SUPERVISOR) and body.device_id:
         if u.device_id and u.device_id != body.device_id:
             raise HTTPException(403, "this account is bound to another phone; ask the admin to reset it")
         if not u.device_id:
@@ -190,6 +192,7 @@ def bootstrap(db: Session = Depends(get_db), user: User = Depends(current_user))
         "zones": [{"id": z.id, "name": z.name, "gate_id": z.gate_id} for z in db.scalars(select(Zone)).all()],
         "server_time": now.isoformat(),
         "site_timezone": get_settings().site_timezone,
+        "demo_mode": get_settings().demo_mode,
         "public_receipt_base": get_settings().public_receipt_base.rstrip("/") or None,
         "settings": {k: st[k] for k in ("lot_name", "upi_vpa", "upi_payee_name", "cash_enabled", "cash_desk_only",
                                         "cash_desk_user_ids", "cash_limit_paise", "cash_warn_ratio", "duration_buttons",

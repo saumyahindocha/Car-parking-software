@@ -4,6 +4,7 @@ analyzer:
   exclude:
     - build/**
     - android/**
+    - web/**
   language:
     strict-casts: false
 

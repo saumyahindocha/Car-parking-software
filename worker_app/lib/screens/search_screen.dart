@@ -168,15 +168,17 @@ class _SearchScreenState extends State<SearchScreen> {
                   onSubmitted: _search,
                 ),
               ),
-              const SizedBox(width: 8),
-              SizedBox(
-                height: 58,
-                child: FilledButton.tonalIcon(
-                  onPressed: _scan,
-                  icon: const Icon(Icons.camera_alt),
-                  label: const Text('Scan'),
+              if (plateOcrAvailable) ...[
+                const SizedBox(width: 8),
+                SizedBox(
+                  height: 58,
+                  child: FilledButton.tonalIcon(
+                    onPressed: _scan,
+                    icon: const Icon(Icons.camera_alt),
+                    label: const Text('Scan'),
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         ),

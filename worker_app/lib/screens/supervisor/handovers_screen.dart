@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -148,7 +148,8 @@ class HandoverConfirmScreen extends StatefulWidget {
 
 class _HandoverConfirmScreenState extends State<HandoverConfirmScreen> {
   Map<int, int> _counted = {};
-  File? _photo;
+  XFile? _photo;
+  Uint8List? _photoBytes;
   final _note = TextEditingController();
   bool _busy = false;
 
@@ -157,7 +158,13 @@ class _HandoverConfirmScreenState extends State<HandoverConfirmScreen> {
   Future<void> _takePhoto() async {
     try {
       final x = await ImagePicker().pickImage(source: ImageSource.camera, maxWidth: 1600, imageQuality: 80);
-      if (x != null) setState(() => _photo = File(x.path));
+      if (x != null) {
+        final bytes = await x.readAsBytes();
+        setState(() {
+          _photo = x;
+          _photoBytes = bytes;
+        });
+      }
     } catch (e) {
       if (mounted) showSnack(context, 'Camera unavailable: $e', error: true);
     }
@@ -246,7 +253,7 @@ class _HandoverConfirmScreenState extends State<HandoverConfirmScreen> {
             if (_photo != null)
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
-                child: Image.file(_photo!, height: 200, fit: BoxFit.cover),
+                child: Image.memory(_photoBytes!, height: 200, fit: BoxFit.cover),
               ),
             OutlinedButton.icon(
               onPressed: _takePhoto,

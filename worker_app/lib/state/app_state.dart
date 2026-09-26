@@ -15,7 +15,11 @@ import '../tariff/tariff.dart' show tzOffsetFor;
 import '../util/format.dart' show siteOffset;
 import 'collect_model.dart';
 
-const String defaultServerUrl = 'http://192.168.10.2:8000';
+const String _lanServerUrl = 'http://192.168.10.2:8000';
+
+/// Browser build: always the server the app was loaded from (no address to type).
+/// Installed app: the lot's edge server on the LAN (editable on the login screen).
+String get defaultServerUrl => kIsWeb ? Uri.base.origin : _lanServerUrl;
 
 class _Keys {
   static const server = 'server_url';
@@ -67,7 +71,7 @@ class AppState extends ChangeNotifier {
     }
     final store = await LocalStore.open();
     final api = ApiClient(
-      baseUrl: prefs.getString(_Keys.server) ?? defaultServerUrl,
+      baseUrl: kIsWeb ? defaultServerUrl : (prefs.getString(_Keys.server) ?? defaultServerUrl),
       token: prefs.getString(_Keys.token),
     );
     final s = AppState._(prefs, store, api, deviceId);

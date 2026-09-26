@@ -468,9 +468,27 @@ class _UpiPayScreenState extends State<UpiPayScreen> {
           icon: const Icon(Icons.sms),
           label: Text(_phone == null ? 'Add customer mobile for SMS receipt (optional)' : 'Receipt to ${_phone!}'),
         ),
+        if (_app.bootstrap?.demoMode == true && _payment != null)
+          FilledButton.tonalIcon(
+            onPressed: _busy ? null : _simulatePaid,
+            icon: const Icon(Icons.science),
+            label: const Text('Simulate customer paying (demo)'),
+          ),
         TextButton(onPressed: _busy ? null : _abandon, child: const Text('Customer did not pay / switch to cash')),
       ],
     );
+  }
+
+  /// Demo only: there is no real UPI gateway, so let the tester "pay" the QR.
+  Future<void> _simulatePaid() async {
+    final p = _payment;
+    if (p == null) return;
+    try {
+      await _app.api.demoPay(p.id);
+      await _check();
+    } catch (e) {
+      if (mounted) showError(context, e);
+    }
   }
 
   Widget _done({required String title, required String subtitle, ReceiptInfo? receipt}) {

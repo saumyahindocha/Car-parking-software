@@ -4,6 +4,8 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
+import '../platform/db_factory.dart';
+
 /// Offline action types accepted by `POST /api/sync` (backend api/worker.py).
 class SyncType {
   static const cash = 'CASH';
@@ -99,7 +101,7 @@ class LocalStore {
   /// Opens (or creates) the database. Tests pass `sqflite_common_ffi`'s factory
   /// and `inMemoryDatabasePath`.
   static Future<LocalStore> open({DatabaseFactory? factory, String? path}) async {
-    final f = factory ?? databaseFactory;
+    final f = factory ?? platformDatabaseFactory();
     final dbPath = path ?? p.join(await f.getDatabasesPath(), 'parking_worker.db');
     final db = await f.openDatabase(
       dbPath,

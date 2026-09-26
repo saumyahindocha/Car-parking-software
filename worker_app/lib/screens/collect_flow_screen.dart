@@ -152,14 +152,16 @@ class _CollectFlowScreenState extends State<CollectFlowScreen> {
                   style: const TextStyle(fontSize: 22, fontFamily: 'monospace', fontWeight: FontWeight.w700),
                   decoration: InputDecoration(
                     border: const OutlineInputBorder(),
-                    suffixIcon: IconButton(
-                      icon: const Icon(Icons.camera_alt),
-                      tooltip: 'Scan plate',
-                      onPressed: () async {
-                        final p = await scanPlate(c, stateCodes: codes);
-                        if (p != null) set(() => ctl.text = p);
-                      },
-                    ),
+                    suffixIcon: plateOcrAvailable
+                        ? IconButton(
+                            icon: const Icon(Icons.camera_alt),
+                            tooltip: 'Scan plate',
+                            onPressed: () async {
+                              final p = await scanPlate(c, stateCodes: codes);
+                              if (p != null) set(() => ctl.text = p);
+                            },
+                          )
+                        : null,
                   ),
                   onChanged: (_) => set(() {}),
                 ),

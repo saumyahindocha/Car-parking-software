@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -109,11 +110,12 @@ class _LoginScreenState extends State<LoginScreen> {
                     onPressed: _busy ? null : _login,
                   ),
                   const SizedBox(height: 24),
-                  TextButton.icon(
-                    onPressed: () => setState(() => _showServer = !_showServer),
-                    icon: const Icon(Icons.dns, size: 18),
-                    label: Text('Server: ${app.serverUrl}'),
-                  ),
+                  if (!kIsWeb)
+                    TextButton.icon(
+                      onPressed: () => setState(() => _showServer = !_showServer),
+                      icon: const Icon(Icons.dns, size: 18),
+                      label: Text('Server: ${app.serverUrl}'),
+                    ),
                   if (_showServer) ...[
                     TextField(
                       controller: _server,

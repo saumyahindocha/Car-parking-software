@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     image_root: str = "./data/images"
     upload_root: str = "./data/uploads"
     dashboard_dist: str = "../dashboard/dist"
+    worker_web_dist: str = "../worker_app/build/web"  # phone app (browser build), served at /app/
 
     # device keys (ANPR service, alert units, cloud relay)
     anpr_api_key: str = "dev-anpr-key"

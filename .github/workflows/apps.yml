@@ -1,0 +1,95 @@
+# Builds the ready-to-run apps on GitHub's servers and publishes them as downloads
+# (release "demo-latest"), so nobody needs Flutter, Node.js or the Android SDK locally:
+#   parking-worker.apk   Android app
+#   worker-web.zip       phone app for iPhone/Android browsers (served by the backend at /app/)
+#   dashboard.zip        admin dashboard (served by the backend at /)
+# deploy/demo.sh downloads these automatically.
+name: Build apps
+
+on:
+  push:
+    paths:
+      - "worker_app/**"
+      - "dashboard/**"
+      - ".github/workflows/apps.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: worker_app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+      - name: Android APK
+        run: |
+          flutter build apk --release
+          cp build/app/outputs/flutter-apk/app-release.apk ../parking-worker.apk
+      - name: Phone web app
+        run: |
+          flutter build web --release --base-href /app/ --no-web-resources-cdn
+          # keep only what browsers load (drop debug symbols and unused renderers)
+          find build/web/canvaskit -name '*.symbols' -delete
+          rm -rf build/web/canvaskit/skwasm* build/web/canvaskit/wimp* build/web/canvaskit/webparagraph
+          (cd build/web && zip -qr ../../../worker-web.zip .)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: worker
+          path: |
+            parking-worker.apk
+            worker-web.zip
+
+  dashboard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+      - run: npm run build
+      - run: (cd dist && zip -qr ../../dashboard.zip .)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dashboard
+          path: dashboard.zip
+
+  publish:
+    needs: [worker, dashboard]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - name: Publish release "demo-latest"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete demo-latest --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+          gh release create demo-latest parking-worker.apk worker-web.zip dashboard.zip \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "Latest apps (${GITHUB_SHA::7})" \
+            --notes "Built automatically from ${GITHUB_REF_NAME} @ ${GITHUB_SHA::7}. Android: install parking-worker.apk. iPhone: run ./deploy/demo.sh --phone and scan the QR."
