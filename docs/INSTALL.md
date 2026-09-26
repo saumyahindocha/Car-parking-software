@@ -17,11 +17,14 @@ Network plan used in the examples (adjust to your site):
 
 ## 1. Laptop demo (no cameras, no Pi, no gateway)
 
-Requirements: Python 3.11+, Node 20+ (for the dashboard build).
+Requirements: Python 3.11+ (on Windows: inside WSL). Nothing else — the dashboard and phone app are
+downloaded ready-made.
 
 ```bash
-./deploy/demo.sh
+./deploy/demo.sh --phone
 ```
+Scan the printed QR code with any phone (iPhone or Android) to open the worker app; log in as
+w1 / PIN 1111. On the QR screen of a UPI payment, tap *Simulate customer paying (demo)*.
 This builds the dashboard, starts the backend on SQLite in demo mode with the mock UPI gateway and
 demo users, generates synthetic gate video, and replays it through the ANPR service in real time
 (entries at Gate 1, exits at Gate 2). Open http://localhost:8000 — admin/admin123 (dashboard),
@@ -116,9 +119,13 @@ Hardware: Pi 5 (4 GB) + official PSU + 64 GB high-endurance microSD, 24–32" hi
 
 ---
 
-## 5. Worker phones (Android 12+)
+## 5. Worker phones
 
-1. Build the APK once (Flutter SDK + Android SDK):
+**Any phone, no install (iPhone or Android):** open `http://<edge server>:8000/app` on the lot Wi-Fi
+and add it to the home screen. It talks to the server it was opened from.
+
+**Android app (best offline behaviour and camera plate scan):** download `parking-worker.apk` from the
+GitHub release `demo-latest` (built automatically), or build it yourself:
    ```bash
    cd worker_app && flutter pub get && flutter test && flutter build apk --release
    ```

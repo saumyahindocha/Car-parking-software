@@ -13,7 +13,7 @@ by workers in the app; no customer website is needed.
 | ANPR edge service (side-by-side tracking, two-line plates, cross-camera merge, replay mode) | [`anpr/`](anpr/) | Edge server (GPU) |
 | Backend: sessions, tariff engine, ledger, UPI + cash control, passes, receipts, disputes, reports, WebSocket | [`backend/`](backend/) | Edge server |
 | Admin / supervisor dashboard | [`dashboard/`](dashboard/) | Browser (served by the backend) |
-| Worker / guard / supervisor app (offline-tolerant) | [`worker_app/`](worker_app/) | Android 12+ phones |
+| Worker / guard / supervisor app (offline-tolerant) | [`worker_app/`](worker_app/) | Android app, or any phone's browser (iPhone too) at `/app` |
 | Exit alert unit (display + tower light + buzzer) | [`alert_unit/`](alert_unit/) | Raspberry Pi 5 per gate |
 | *Optional, not deployed by default:* customer website + cloud relay (self-pay, dues, passes) | [`customer_web/`](customer_web/) | Small cloud VM |
 | Deployment, NTP, backups, restore test | [`deploy/`](deploy/) | Edge server |
@@ -27,11 +27,15 @@ by workers in the app; no customer website is needed.
 * [docs/PRIVACY.md](docs/PRIVACY.md) — DPDP Act controls and signage text
 * [docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md) — decisions taken where the spec left room
 
-## Quick start (laptop demo, no cameras)
+## Quick start (laptop demo, no cameras; needs only Python 3.11+)
 ```bash
-./deploy/demo.sh            # backend + dashboard + synthetic ANPR replay + mock UPI gateway
+./deploy/demo.sh --phone    # central system + dashboard + phone app + simulated camera traffic
 ```
-Then open http://localhost:8000 (admin / admin123). See [docs/INSTALL.md §1](docs/INSTALL.md).
+* Dashboard: http://localhost:8000 (admin / admin123)
+* Phone app: scan the QR code the script prints (iPhone or Android), log in as w1 / PIN 1111.
+  On iPhone: Safari → Share → *Add to Home Screen*.
+* The dashboard, phone app and Android APK are built by GitHub Actions and published as release
+  `demo-latest`; the script downloads them, so no Flutter, Node.js or Android SDK is needed.
 
 ## Tests at a glance
 ```bash
