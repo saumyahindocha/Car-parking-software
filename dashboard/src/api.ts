@@ -608,7 +608,40 @@ export function wsUrl(topics?: string[]): string {
 }
 
 // ------------------------------------------------------------------ endpoints
+export interface ImportRow {
+  row: number;
+  plate: string;
+  display_plate: string;
+  status: 'ok' | 'warning' | 'error';
+  messages: string[];
+  actions: string[];
+}
+export interface ImportSummary {
+  rows: number;
+  importable: number;
+  errors: number;
+  warnings: number;
+  new_vehicles: number;
+  contacts: number;
+  passes: number;
+  opening_balances: number;
+  opening_dues_paise: number;
+  opening_credit_paise: number;
+}
+export interface ImportResult {
+  summary: ImportSummary;
+  rows: ImportRow[];
+  committed: boolean;
+  batch?: string;
+  imported_rows?: number;
+}
+
 export const api = {
+  importCustomers: (file: File, commit: boolean, skipErrors = false) => {
+    const f = new FormData();
+    f.append('file', file);
+    return request<ImportResult>('POST', '/api/import/customers', { form: f, query: { commit, skip_errors: skipErrors } });
+  },
   login: (username: string, password: string) => post<{ token: string; user: User }>('/api/auth/login', { username, password }),
   me: () => get<User>('/api/auth/me'),
 

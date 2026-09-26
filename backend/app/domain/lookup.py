@@ -31,6 +31,13 @@ def day_bounds(date_str: str) -> tuple[datetime, datetime]:
     return start, start + timedelta(days=1)
 
 
+def last_valid_day(ends_at: datetime):
+    """Passes end at local midnight *after* their last day; this is the last day a customer can use it."""
+    from datetime import timedelta
+
+    return (ends_at - timedelta(microseconds=1)).astimezone(site_tz()).date()
+
+
 def get_tariff(db: Session, vehicle_class: str, at: datetime) -> Tariff:
     rows = db.scalars(select(Tariff).where(Tariff.vehicle_class == vehicle_class,
                                            Tariff.effective_from <= at)).all()

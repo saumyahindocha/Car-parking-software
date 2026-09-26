@@ -313,7 +313,8 @@ def pass_report(db: Session, start_date: str, end_date: Optional[str] = None) ->
     expiring = db.scalars(select(Pass).where(Pass.status == "ACTIVE", Pass.ends_at > now,
                                              Pass.ends_at <= now + timedelta(days=7))).all()
     sold = db.execute(select(func.count(Pass.id), func.coalesce(func.sum(Pass.amount_paise), 0)).where(
-        Pass.status.in_(["ACTIVE", "EXPIRED"]), Pass.created_at >= start, Pass.created_at < end)).one()
+        Pass.status.in_(["ACTIVE", "EXPIRED"]), Pass.channel != "IMPORT",  # imported passes were sold elsewhere
+        Pass.created_at >= start, Pass.created_at < end)).one()
     total_sessions = db.scalar(select(func.count(ParkingSession.id)).where(
         ParkingSession.entry_at >= start, ParkingSession.entry_at < end)) or 0
     pass_sessions = db.scalar(select(func.count(ParkingSession.id)).where(
@@ -335,7 +336,7 @@ def defaulters(db: Session, threshold_paise: Optional[int] = None, one_time_days
     for v in db.scalars(select(Vehicle).where(Vehicle.balance_paise > thr).order_by(Vehicle.balance_paise.desc())).all():
         row = {"vehicle_id": v.id, "plate": v.plate, "display_plate": v.display_plate, "balance_paise": v.balance_paise,
                "last_seen": v.last_seen.isoformat(), "phone": v.phone, "visits": visits.get(v.id, 0)}
-        if visits.get(v.id, 0) <= 1 and v.last_seen < now - timedelta(days=one_time_days):
+        if visits.get(v.id, 0) == 1 and v.last_seen < now - timedelta(days=one_time_days):
             one_time.append(row)
         else:
             regular.append(row)

@@ -185,6 +185,14 @@ with TLS. Details and environment variables: [customer_web/README.md](../custome
 
 ---
 
+## 6a. Bring over existing customers
+
+Before go-live, import your current monthly-pass holders, regular customers and any unpaid dues from the
+old register: Dashboard → **Import customers** (admin). Download the template, fill it in (or export
+from your old system and rename the columns), upload it, review the row-by-row check, then confirm.
+Re-uploading the same file is safe. From a server shell the same import is
+`docker compose exec backend python -m app.import_customers /path/file.xlsx [--commit]`.
+
 ## 7. Go-live checklist
 - [ ] All devices show the edge server's time (NTP) — check a camera OSD against the dashboard clock.
 - [ ] Live page: 4 ANPR + 2 overview cameras streaming, 2 alert units online, internet + gateway green.
@@ -193,6 +201,7 @@ with TLS. Details and environment variables: [customer_web/README.md](../custome
 - [ ] Unplug the WAN: offline UPI QR works; plug back: the claim is confirmed by reconciliation.
 - [ ] Unpaid exit: alert unit turns red, guard phone alerts, dispute from the alert works.
 - [ ] Handover with photo, bank deposit entry, cash reconciliation for the day shows no gap.
+- [ ] Existing pass holders and dues imported (§6a); a test pass holder enters without interaction.
 - [ ] Backup log shows last night's backup; run `./verify_backup.sh` once by hand.
 - [ ] Signage installed (tariff, ANPR/DPDP notice, cash-receipt notice) — texts in [PRIVACY.md](PRIVACY.md).
 

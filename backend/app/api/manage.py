@@ -623,3 +623,41 @@ def privacy_erase(vehicle_id: int, body: EraseIn, db: Session = Depends(get_db),
     res = privacy.erase_vehicle(db, vehicle_id, reason=body.reason)
     db.commit()
     return res
+
+
+# ------------------------------------------------------------------ import existing customers (admin)
+@router.get("/import/customers/template")
+def import_template(user: User = Depends(admin)):
+    from fastapi.responses import Response
+
+    from ..domain import importer
+
+    return Response(importer.template_csv(), media_type="text/csv",
+                    headers={"Content-Disposition": 'attachment; filename="customer-import-template.csv"'})
+
+
+@router.post("/import/customers")
+def import_customers(file: UploadFile = File(...), commit: bool = False, skip_errors: bool = False,
+                     db: Session = Depends(get_db), user: User = Depends(admin)):
+    """Dry run by default: returns what would happen per row. commit=true applies it (all rows must be valid
+    unless skip_errors=true, in which case rows with errors are left out)."""
+    from ..domain import importer
+
+    content = file.file.read()
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(400, "file too large (max 10 MB)")
+    try:
+        rows = importer.read_rows(content, file.filename or "")
+    except importer.ImportFileError as e:
+        raise HTTPException(400, str(e))
+    if len(rows) > 20000:
+        raise HTTPException(400, "too many rows (max 20,000 per file)")
+    plans = importer.plan(db, rows)
+    summ = importer.summary(plans)
+    result: dict = {"summary": summ, "rows": [p.as_dict() for p in plans], "committed": False}
+    if commit:
+        if summ["errors"] and not skip_errors:
+            raise HTTPException(400, f"{summ['errors']} row(s) have errors; fix them or import with skip_errors")
+        result.update(importer.apply(db, plans, user), committed=True)
+        db.commit()
+    return result

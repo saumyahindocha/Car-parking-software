@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from ..config import get_settings
 from ..models import ParkingSession, Pass, PassType, Payment, Receipt, User, Vehicle
 from . import notify
-from .lookup import site_tz
+from .lookup import last_valid_day, site_tz
 from .settings import get_setting
 
 _ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
@@ -57,7 +57,7 @@ def issue_receipt(db: Session, p: Payment, code: str | None = None) -> Receipt:
         ps = db.get(Pass, p.pass_id)
         pt = db.get(PassType, ps.pass_type_id)
         data["pass"] = {"type": pt.name, "valid_from": ps.starts_at.astimezone(tz).date().isoformat(),
-                        "valid_till": ps.ends_at.astimezone(tz).date().isoformat()}
+                        "valid_till": last_valid_day(ps.ends_at).isoformat()}
     data["text"] = receipt_text(data)
     phone = p.phone or veh.phone
     m_pref = "WHATSAPP" if notify.get_messenger().prefer_whatsapp else "SMS"

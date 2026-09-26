@@ -148,3 +148,25 @@ def test_sync_extensions_cancel_and_claim_existing(client, gateway):
     assert res[0]["payment"]["receipt"]["code"] == "abcd2345"
     assert c.get("/api/public/receipts/abcd2345").status_code == 200
     assert c.get("/api/bootstrap", headers=w).json()["site_timezone"] == "Asia/Kolkata"
+
+
+def test_customer_import_endpoints(client):
+    c = client
+    adm = login(c, "admin", password="admin123")
+    sup = login(c, "sup1", password="super123")
+    assert c.get("/api/import/customers/template", headers=sup).status_code == 403
+    tpl = c.get("/api/import/customers/template", headers=adm)
+    assert tpl.status_code == 200 and tpl.text.startswith("plate,")
+    good = b"plate,phone,opening_balance\nMH43AB1234,9876543210,40\n"
+    bad = good + b"NOTAPLATE,,\n"
+    r = c.post("/api/import/customers", files={"file": ("c.csv", good, "text/csv")}, headers=adm).json()
+    assert r["committed"] is False and r["summary"]["new_vehicles"] == 1
+    assert c.get("/api/vehicles/search?q=MH43AB1234", headers=adm).json() == []          # dry run changed nothing
+    assert c.post("/api/import/customers?commit=true", files={"file": ("c.csv", bad, "text/csv")},
+                  headers=adm).status_code == 400
+    r = c.post("/api/import/customers?commit=true&skip_errors=true", files={"file": ("c.csv", bad, "text/csv")},
+               headers=adm).json()
+    assert r["committed"] and r["imported_rows"] == 1
+    v = c.get("/api/vehicles/search?q=MH43AB1234", headers=adm).json()[0]
+    assert v["balance_paise"] == 4000 and v["phone"] == "9876543210"
+    assert c.post("/api/import/customers", files={"file": ("c.pdf", b"x", "application/pdf")}, headers=adm).status_code == 400

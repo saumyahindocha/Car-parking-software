@@ -13,7 +13,7 @@ from ..config import get_settings
 from ..db import utcnow
 from ..models import LedgerKind, ParkingSession, Pass, PassType, Payment, SessionStatus, Vehicle
 from . import ledger, notify
-from .lookup import site_tz
+from .lookup import last_valid_day, site_tz
 from .settings import get_setting
 
 
@@ -96,9 +96,9 @@ def send_reminders(db: Session, now: Optional[datetime] = None) -> int:
                                                               Pass.status == "ACTIVE", Pass.starts_at >= p.ends_at))
         if renewed:
             continue
-        left = (p.ends_at.astimezone(tz).date() - now.astimezone(tz).date()).days
+        left = (last_valid_day(p.ends_at) - now.astimezone(tz).date()).days
         link = f"{base}/pass?plate={veh.plate}" if base else ""
-        ends_on = p.ends_at.astimezone(tz).date().isoformat()
+        ends_on = last_valid_day(p.ends_at).isoformat()
         if left <= 1 and not p.remind_1d_sent:
             notify.pass_reminder(db, veh, left, ends_on, link)
             p.remind_1d_sent = p.remind_5d_sent = True
@@ -125,6 +125,6 @@ def pass_dict(db: Session, p: Pass) -> dict:
     tz = site_tz()
     return {"id": p.id, "vehicle_id": p.vehicle_id, "plate": veh.plate, "display_plate": veh.display_plate,
             "vehicle_class": p.vehicle_class, "pass_type": pt.name, "pass_type_id": pt.id,
-            "starts_on": p.starts_at.astimezone(tz).date().isoformat(), "ends_on": p.ends_at.astimezone(tz).date().isoformat(),
+            "starts_on": p.starts_at.astimezone(tz).date().isoformat(), "ends_on": last_valid_day(p.ends_at).isoformat(),
             "starts_at": p.starts_at.isoformat(), "ends_at": p.ends_at.isoformat(),
             "amount_paise": p.amount_paise, "status": p.status, "channel": p.channel, "phone": veh.phone}

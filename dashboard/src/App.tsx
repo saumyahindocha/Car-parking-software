@@ -17,6 +17,7 @@ import ConfigPage from './pages/Config';
 import AlertsPage from './pages/Alerts';
 import AuditPage from './pages/Audit';
 import PrivacyPage from './pages/Privacy';
+import ImportPage from './pages/Import';
 
 export default function App() {
   return (
@@ -100,6 +101,7 @@ function Shell() {
     { to: '/reports', label: 'Reports' },
     { to: '/alerts', label: 'Alerts', badge: openAlerts ?? undefined },
     { to: '/config', label: 'Configuration' },
+    { to: '/import', label: 'Import customers', admin: true },
     { to: '/privacy', label: 'Privacy', admin: true },
     { to: '/audit', label: 'Audit log', admin: true },
   ];
@@ -166,6 +168,7 @@ function Shell() {
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/alerts" element={<AlertsPage onChange={loadAlerts} />} />
           <Route path="/config" element={<ConfigPage />} />
+          <Route path="/import" element={isAdmin ? <ImportPage /> : <Navigate to="/" />} />
           <Route path="/privacy" element={isAdmin ? <PrivacyPage /> : <Navigate to="/" />} />
           <Route path="/audit" element={isAdmin ? <AuditPage /> : <Navigate to="/" />} />
           <Route path="*" element={<Navigate to="/" />} />

@@ -29,7 +29,7 @@ from ..models import (
     VehicleClass,
 )
 from . import ledger, plates
-from .lookup import active_pass, gate_direction, get_tariff, site_tz, zone_for_gate
+from .lookup import active_pass, gate_direction, get_tariff, last_valid_day, site_tz, zone_for_gate
 from .settings import get_setting
 from .tariff import calculate_charge
 
@@ -508,9 +508,9 @@ def _exit_display(ev: AnprEvent, vehicle: Optional[Vehicle], sess: Optional[Park
         "pass_expiry_warn_days": None,
     }
     if pass_ is not None and pass_.ends_at >= ev.ts:
-        local_end = pass_.ends_at.astimezone(site_tz())
-        d["pass_valid_till"] = local_end.date().isoformat()
-        d["pass_days_left"] = max(0, (local_end.date() - ev.ts.astimezone(site_tz()).date()).days)
+        last_day = last_valid_day(pass_.ends_at)
+        d["pass_valid_till"] = last_day.isoformat()
+        d["pass_days_left"] = max(0, (last_day - ev.ts.astimezone(site_tz()).date()).days)
     return d
 
 
