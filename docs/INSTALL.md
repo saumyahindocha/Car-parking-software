@@ -133,7 +133,10 @@ Hardware: Pi 5 (4 GB) + official PSU + 64 GB high-endurance microSD, 24–32" hi
 
 ---
 
-## 6. Cloud relay (customer pages)
+## 6. Cloud relay (customer pages) — optional, not deployed by default
+
+Skip this section unless you decide to offer customer self-service online. Without it, receipts are
+self-contained (SMS text / on-screen QR) and passes are sold and renewed by workers in the app.
 
 A small VM (1 vCPU, 1 GB) with a domain, e.g. `pay.example-parking.in`, behind Caddy or NGINX
 with TLS. Details and environment variables: [customer_web/README.md](../customer_web/README.md).

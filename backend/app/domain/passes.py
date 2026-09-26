@@ -97,7 +97,7 @@ def send_reminders(db: Session, now: Optional[datetime] = None) -> int:
         if renewed:
             continue
         left = (p.ends_at.astimezone(tz).date() - now.astimezone(tz).date()).days
-        link = f"{base}/pass?plate={veh.plate}"
+        link = f"{base}/pass?plate={veh.plate}" if base else ""
         ends_on = p.ends_at.astimezone(tz).date().isoformat()
         if left <= 1 and not p.remind_1d_sent:
             notify.pass_reminder(db, veh, left, ends_on, link)

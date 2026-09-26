@@ -577,6 +577,7 @@ def payment_dict(db: Session, p: Payment) -> dict:
             "collected_by": p.collected_by, "collected_by_name": (db.get(User, p.collected_by).name if p.collected_by else None),
             "channel": p.channel, "created_at": p.created_at.isoformat() if p.created_at else None,
             "confirmed_at": p.confirmed_at.isoformat() if p.confirmed_at else None, "utr": p.utr,
-            "receipt": {"code": rec.code, "number": rec.number, "link": rec.data.get("link"), "channel": rec.channel,
+            "receipt": {"code": rec.code, "number": rec.number, "link": rec.data.get("link"),
+                        "text": rec.data.get("text"), "channel": rec.channel,
                         "delivery_status": rec.delivery_status} if rec else None,
             "limit_breach": p.limit_breach, "status_note": p.status_note}

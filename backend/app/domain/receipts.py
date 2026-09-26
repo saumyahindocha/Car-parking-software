@@ -36,7 +36,8 @@ def issue_receipt(db: Session, p: Payment, code: str | None = None) -> Receipt:
             code = _code()
     at = (p.confirmed_at or p.created_at).astimezone(tz)
     number = f"R{at:%y%m%d}-{p.id:07d}"
-    link = f"{get_settings().public_receipt_base.rstrip('/')}/{code}"
+    base = get_settings().public_receipt_base.rstrip("/")
+    link = f"{base}/{code}" if base else None
     gst_rate = float(get_setting(db, "gst_rate_percent") or 0)
     data = {
         "number": number, "link": link, "lot_name": get_setting(db, "lot_name"),
@@ -57,6 +58,7 @@ def issue_receipt(db: Session, p: Payment, code: str | None = None) -> Receipt:
         pt = db.get(PassType, ps.pass_type_id)
         data["pass"] = {"type": pt.name, "valid_from": ps.starts_at.astimezone(tz).date().isoformat(),
                         "valid_till": ps.ends_at.astimezone(tz).date().isoformat()}
+    data["text"] = receipt_text(data)
     phone = p.phone or veh.phone
     m_pref = "WHATSAPP" if notify.get_messenger().prefer_whatsapp else "SMS"
     r = Receipt(code=code, number=number, payment_id=p.id, pass_id=p.pass_id, data=data, phone=phone,
@@ -67,6 +69,28 @@ def issue_receipt(db: Session, p: Payment, code: str | None = None) -> Receipt:
     if phone:
         notify.receipt_message(db, r)
     return r
+
+
+def _rs(paise: int) -> str:
+    return f"Rs {paise / 100:.0f}" if paise % 100 == 0 else f"Rs {paise / 100:.2f}"
+
+
+def receipt_text(d: dict) -> str:
+    """Self-contained receipt (used as the QR payload and SMS body when there is no customer website)."""
+    lines = [d.get("lot_name") or "Parking", f"Receipt {d['number']}", f"Vehicle: {d['plate']}",
+             f"Paid: {_rs(d['amount_paise'])} ({d['mode']})", f"Time: {d['paid_at'][:16].replace('T', ' ')}"]
+    if d.get("duration_paid_minutes"):
+        lines.append(f"Duration paid: {d['duration_paid_minutes'] // 60} h")
+    if d.get("dues_cleared_paise"):
+        lines.append(f"Previous dues cleared: {_rs(d['dues_cleared_paise'])}")
+    if d.get("pass"):
+        lines.append(f"Pass: {d['pass']['type']} valid {d['pass']['valid_from']} to {d['pass']['valid_till']}")
+    if d.get("upi_ref"):
+        lines.append(f"UPI ref: {d['upi_ref']}")
+    if d.get("gstin"):
+        lines.append(f"GSTIN: {d['gstin']}")
+    lines.append(d.get("footer") or "")
+    return "\n".join(x for x in lines if x)
 
 
 def mark_shown(db: Session, receipt: Receipt) -> Receipt:

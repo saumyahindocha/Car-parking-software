@@ -127,12 +127,14 @@ def test_cash_receipt_digital_and_phone(db, gateway, messenger):
     r = event(db, "IN", "MH43AB1234", T0)
     p = payments.record_cash(db, quote_session(db, r.session.id, 120), user=user(db, "w1"), phone="9876543210")
     rec = db.get(Receipt, p.receipt_id)
-    assert rec.channel == "SMS" and rec.data["amount_paise"] == 1000 and rec.data["link"].endswith(rec.code)
+    assert rec.channel == "SMS" and rec.data["amount_paise"] == 1000 and rec.data["link"] is None
     assert "Final charge is calculated on actual time" in rec.data["footer"]
+    assert "Rs 10 (CASH)" in rec.data["text"] and rec.number in rec.data["text"]
     from app.domain import notify
 
     notify.deliver_pending(db)
     assert rec.delivery_status == "SENT" and messenger.sms.sent
+    assert rec.number in messenger.sms.sent[-1][2]  # without a website the SMS carries the full receipt
     r2 = event(db, "IN", "MH43AB9999", T0)
     p2 = payments.record_cash(db, quote_session(db, r2.session.id, 120), user=user(db, "w1"))
     assert db.get(Receipt, p2.receipt_id).channel == "QR"

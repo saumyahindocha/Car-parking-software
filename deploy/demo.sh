@@ -39,8 +39,7 @@ else
 fi
 
 export PARK_DATABASE_URL="sqlite:///$WORK/demo.db" PARK_DEMO_MODE=true PARK_GATEWAY=mock \
-       PARK_IMAGE_ROOT="$WORK/images" PARK_UPLOAD_ROOT="$WORK/uploads" PARK_DASHBOARD_DIST="$ROOT/dashboard/dist" \
-       PARK_PUBLIC_RECEIPT_BASE="http://localhost:$PORT/r"
+       PARK_IMAGE_ROOT="$WORK/images" PARK_UPLOAD_ROOT="$WORK/uploads" PARK_DASHBOARD_DIST="$ROOT/dashboard/dist"
 if [[ $RELAY == 1 ]]; then
   export PARK_RELAY_URL="http://localhost:8080" PARK_RELAY_API_KEY="demo-relay-key" PARK_PUBLIC_RECEIPT_BASE="http://localhost:8080/r"
 fi

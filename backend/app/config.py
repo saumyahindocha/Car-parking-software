@@ -22,8 +22,10 @@ class Settings(BaseSettings):
     device_api_key: str = "dev-device-key"
     relay_url: str = ""
     relay_api_key: str = "dev-relay-key"
-    public_receipt_base: str = "http://localhost:8080/r"
-    public_site_url: str = ""  # customer site root for renewal links; defaults to the receipt host
+    # Optional customer website (customer_web/). Empty = not deployed: receipts are self-contained text
+    # (SMS + on-screen QR) and pass renewals happen with a worker.
+    public_receipt_base: str = ""
+    public_site_url: str = ""
 
     # payment gateway: "mock" | "razorpay"
     gateway: str = "mock"

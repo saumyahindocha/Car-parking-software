@@ -79,7 +79,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
 
   /// Online: the receipt link. Offline: a provisional text receipt (the final
   /// receipt link is issued when the phone syncs).
-  String get _qrData => _payment?.receipt?.link ?? _offlineLink ?? _offlineText;
+  String get _qrData => _payment?.receipt?.link ?? _payment?.receipt?.text ?? _offlineLink ?? _offlineText;
 
   /// `${public_receipt_base}/<code>` from the cached bootstrap.
   String? get _offlineLink {

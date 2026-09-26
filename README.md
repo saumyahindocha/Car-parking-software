@@ -4,7 +4,9 @@ Complete system for a two-wheeler parking lot next to a railway station (≈3,00
 3,000 exits a day, sharp commuter peaks), ready for cars later. Vehicles are **never stopped**:
 ANPR cameras identify them on the move, floor workers collect **UPI first** (with a controlled
 cash pathway) inside the lot, charges settle on **actual time** with differences carried to the
-next visit, monthly-pass holders pass with **zero interaction**, and every receipt is **digital**.
+next visit, monthly-pass holders pass with **zero interaction**, and every receipt is **digital**
+(SMS with the full receipt, or a receipt QR shown on the worker's phone). Passes are sold and renewed
+by workers in the app; no customer website is needed.
 
 | Component | Folder | Runs on |
 |---|---|---|
@@ -13,7 +15,7 @@ next visit, monthly-pass holders pass with **zero interaction**, and every recei
 | Admin / supervisor dashboard | [`dashboard/`](dashboard/) | Browser (served by the backend) |
 | Worker / guard / supervisor app (offline-tolerant) | [`worker_app/`](worker_app/) | Android 12+ phones |
 | Exit alert unit (display + tower light + buzzer) | [`alert_unit/`](alert_unit/) | Raspberry Pi 5 per gate |
-| Customer pages + cloud relay (self-pay, dues, passes, receipts) | [`customer_web/`](customer_web/) | Small cloud VM |
+| *Optional, not deployed by default:* customer website + cloud relay (self-pay, dues, passes) | [`customer_web/`](customer_web/) | Small cloud VM |
 | Deployment, NTP, backups, restore test | [`deploy/`](deploy/) | Edge server |
 
 ## Documentation

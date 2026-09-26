@@ -71,3 +71,10 @@ Dashboard → Configuration without code changes.
 24. The backend runs as **one** process (uvicorn, async + thread pool) so the WebSocket hub and job
     scheduler are in-process; measured capacity is far above the site's peak (see ARCHITECTURE §6).
 25. Both gates can be set to `BOTH`; the simulator does so. The seed data sets Gate 1 = IN, Gate 2 = OUT.
+
+## Scope change (owner decision)
+26. **No customer website by default.** Customers deal only with the worker: passes are bought and
+    renewed through the worker app (the plate then passes free for the whole period), receipts are
+    self-contained text (SMS / on-screen QR) instead of links, and pass reminders say "renew with any
+    parking attendant". `customer_web/` stays in the repository, disabled, and can be switched on later
+    by setting `PARK_RELAY_URL` / `PARK_PUBLIC_RECEIPT_BASE`.

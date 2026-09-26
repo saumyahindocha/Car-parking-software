@@ -283,6 +283,9 @@ class ReceiptInfo {
   String get code => _s(raw['code']) ?? '';
   String? get number => _s(raw['number']);
   String? get link => _s(raw['link']);
+
+  /// Self-contained receipt text (used as the QR when no customer website is deployed).
+  String? get text => _s(raw['text']);
   String? get channel => _s(raw['channel']);
   String? get deliveryStatus => _s(raw['delivery_status']);
   bool get toPhone => channel == 'SMS' || channel == 'WHATSAPP';

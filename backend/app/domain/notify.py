@@ -33,10 +33,13 @@ def enqueue(db: Session, to: str, template: str, body: str, channel: Optional[st
 
 def receipt_message(db: Session, receipt: Receipt) -> None:
     d = receipt.data
-    body = (f"{d.get('lot_name')}: Rs {_rupees(d['amount_paise'])} received for {d['plate']} "
-            f"({d.get('mode')}). Receipt {receipt.number}: {d['link']}")
+    if d.get("link"):
+        body = (f"{d.get('lot_name')}: Rs {_rupees(d['amount_paise'])} received for {d['plate']} "
+                f"({d.get('mode')}). Receipt {receipt.number}: {d['link']}")
+    else:  # no customer website: the SMS itself is the receipt
+        body = d.get("text") or f"{d.get('lot_name')}: Rs {_rupees(d['amount_paise'])} received for {d['plate']}"
     enqueue(db, receipt.phone, "receipt", body,
-            variables={"plate": d["plate"], "amount": _rupees(d["amount_paise"]), "receipt": receipt.number, "link": d["link"]},
+            variables={"plate": d["plate"], "amount": _rupees(d["amount_paise"]), "receipt": receipt.number, "link": d.get("link") or ""},
             channel="WHATSAPP" if receipt.channel == "WHATSAPP" else "SMS", receipt_id=receipt.id)
 
 
@@ -50,8 +53,9 @@ def settlement(db: Session, vehicle: Vehicle, sess: ParkingSession) -> None:
 
 
 def pass_reminder(db: Session, vehicle: Vehicle, days_left: int, ends_on: str, link: str) -> None:
+    renew = f"Renew: {link}" if link else "Renew with any parking attendant."
     body = (f"{get_setting(db, 'lot_name')}: parking pass for {vehicle.display_plate} expires on {ends_on} "
-            f"({days_left} day{'s' if days_left != 1 else ''}). Renew: {link}")
+            f"({days_left} day{'s' if days_left != 1 else ''}). {renew}")
     enqueue(db, vehicle.phone, "pass_reminder", body,
             variables={"plate": vehicle.display_plate, "date": ends_on, "link": link})
 
