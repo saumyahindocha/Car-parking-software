@@ -1,0 +1,305 @@
+# ANPR edge service
+
+Code: `anpr/`. Entry point: `python -m anpr_service`. Target runtime is
+Python 3.12 on Ubuntu 24.04 with an NVIDIA GPU.
+
+## 1. Architecture
+
+```
+            ┌──────────── edge server (one container) ─────────────────────────────┐
+ RTSP  ───► │ cam worker G1-L ─┐                                                    │
+ RTSP  ───► │ cam worker G1-R ─┼─► gate aggregator G1 ─┐                           │
+ RTSP  ───► │ cam worker G1-O ─┘  (merge, dedupe,      │  SQLite    ┌─────────┐    │  POST /api/anpr/events
+            │                      direction, images)  ├─► outbox ─►│ emitter │ ──►│  (X-Device-Key)
+ RTSP  ───► │ cam worker G2-L ─┐                       │            └─────────┘    │
+ RTSP  ───► │ cam worker G2-R ─┼─► gate aggregator G2 ─┘                           │
+ RTSP  ───► │ cam worker G2-O ─┘                                                    │
+            │ supervisor: config refresh (GET /api/anpr/config), watchdog, signals  │
+            └───────────────────────────────────────────────────────────────────────┘
+   every camera worker: POST /api/devices/heartbeat every 10 s
+   images: IMAGE_ROOT/YYYY/MM/DD/<gate>/<event_id>_<kind>.jpg (volume shared with the backend)
+```
+
+* **One process per camera** (`multiprocessing`, `spawn`). Each has a
+  grabber thread with a bounded queue, the recognition pipeline, and a
+  heartbeat thread. Overview cameras send a downscaled JPEG snapshot every
+  0.25 s instead of running recognition.
+* **One aggregator process per gate** receives `CameraRead` messages. These
+  carry JPEG bytes, never raw frames. The aggregator merges, de-duplicates,
+  resolves direction, writes the images and appends each event to the outbox.
+* **One emitter process** delivers from the outbox strictly in order.
+* **Supervisor.** It restarts dead camera workers. It refreshes the backend
+  config every 30 s: a direction or settings change goes to the aggregators
+  and pipelines, and a camera URL/ROI/line change restarts that worker.
+  SIGTERM drains gracefully.
+* **Replay mode** (`replay`) runs the same processes on video files. All
+  cameras share one start epoch, so their timelines line up. `--realtime`
+  paces the frames and `--loop` repeats the videos. `replay --inline` (and the
+  tests and `evaluate`) runs every component in one deterministic process.
+
+### 1.1 Per-camera pipeline (`pipeline.py`)
+
+1. **Detect and classify** vehicles (BIKE / CAR / OTHER) and plates through the
+   `PlateRecognizer` engine. Detections outside the ROI polygon are dropped.
+2. **Track** with the in-house SORT tracker (`tracker.py`): a constant-velocity
+   Kalman filter over (cx, cy, w, h) and Hungarian assignment on IoU, with a
+   normalised centre-distance fallback and a size-change gate. Tracks coast
+   for up to `max_age` frames, so a bike hidden by its neighbour keeps its ID.
+3. **Associate plates to vehicles.** A plate goes to the vehicle box that
+   contains it. When several boxes do, the nearest vehicle (lowest box bottom
+   in a rear view) wins. A plausibility rule applies: the plate centre must
+   be no more than 4 plate-widths above the vehicle's ground contact. This
+   stops a far bike's plate from being assigned to a near bike whose box
+   overlaps it.
+4. **Quality gate.** A frame is skipped for voting when the plate is narrower
+   than `min_plate_width_px`, when a nearer vehicle covers more than
+   `max_plate_occlusion` of the plate, when it is blurred (Laplacian variance
+   below `min_sharpness`), or when its text row is under 13 px tall.
+5. **OCR.** `rows.py` binarises the crop, removes the plate border and splits
+   the horizontal ink profile into one or two rows. Each row is read, then
+   the rows are joined top to bottom (`MH43` + `AB1234`).
+6. **Voting** (`voting.py`). Each read is first corrected position by
+   position to a valid Indian format where possible. Reads are grouped by
+   length. Each character position sums `frame weight × char confidence`,
+   where frame weight comes from plate size, sharpness and occlusion.
+   Candidates are the consensus, runner-up swaps and whole-string tallies.
+   Invalid candidates are penalised, so a valid reading wins when one exists.
+7. **Crossing.** The bottom-centre of the vehicle box (`track_anchor`) is
+   tested against the capture-line segment. The travel sign is
+   `sign(dot(track displacement, in_vector))`. The track is finalised at once
+   if the vote is confident (at least `min_votes` votes, confidence at least
+   `min_confidence`, valid format), otherwise after `post_cross_s`. It is then
+   emitted as a `CameraRead`: READ, or UNREAD with the best crop and the
+   annotated full frame.
+
+### 1.2 Gate aggregation (`aggregator.py`)
+
+| Situation | Rule |
+|---|---|
+| Same plate from both cameras | Confusion-aware equality within `merge_window_s` (10 s): **one event**. The highest-confidence read supplies `plate_crop`/`full_frame`, the other camera's images go in `images.extra`, and `camera_ids` lists both. |
+| Near-identical reads (Levenshtein ≤ 1) of the **same crossing** from both cameras | Merged. Two vehicles cannot be at the same place at the same time. |
+| UNREAD from one camera and any read from the **other** camera | Merged when the crossing times are within `unread_merge_s` and the lateral positions within `unread_merge_dx`. Lateral position is the fraction of the gate width, taken from each camera's `gate_span`. |
+| UNREAD with no partner | Emitted as `status: "UNREAD"` with images, so nothing passes silently. |
+| Same plate at the same gate within `dedupe_window_s` (60 s) | Dropped and counted. A late read within the merge window is folded into the event already sent. |
+| Direction | `observed = IN if travel_sign > 0 else OUT`. Gate BOTH gives `wrong_way=false`. A single-direction gate facing opposite travel gives `wrong_way=true`, with `direction` set to the observed travel. The direction comes from the latest backend config, which applies the admin schedule. |
+
+**When a crossing is emitted.** A cluster is emitted when every live ANPR
+camera of the gate has processed frames up to `first crossing + merge_hold_s`
+(0.5 s). Progress is tracked with event-time watermarks. A cluster that
+already has reads from both cameras is emitted at once. A camera at EOS, or
+silent for `camera_stale_s`, does not hold up the gate. Because merging uses
+event time, it behaves the same live and in as-fast-as-possible replay.
+
+**Latency budget** (target < 1.5 s from crossing to event, 4 vehicles per gate):
+
+| Stage | Budget |
+|---|---|
+| Frame processing lag | ≈ 1 frame |
+| `post_cross_s` (only when not yet confident) | 0–0.25 s |
+| `merge_hold_s` | 0.5 s (skipped when both cameras have reported) |
+| Image write + outbox + POST | < 50 ms |
+
+`latency_ms` in each event is the time from the crossing frame's grab (wall
+clock) to the event being queued. Per-stage timings (`detect`, `track`,
+`plates`, `ocr`, `finalize`: mean, p95, max) are logged every 60 s per camera.
+They are also returned by `replay --inline` and `evaluate`.
+
+Measured on a 4-core CI container (no GPU) with the classical engine at
+1280×720, 25 fps, and 6 camera processes: realtime replay latency was
+0.37–1.5 s, including CPU contention. The classical engine costs about
+8–12 ms per frame per camera.
+
+## 2. The recognition engine interface
+
+```python
+class PlateRecognizer(ABC):
+    def analyze(self, frame, roi_mask=None) -> list[VehicleObservation]  # box, class, plate box, optional read
+    def read_plate(self, crop) -> OcrResult | None                       # rows joined top to bottom
+```
+
+| Engine | `recognizer.kind` | Notes |
+|---|---|---|
+| `LocalOnnxRecognizer` | `onnx` | A YOLO-style detector ONNX (`yolov8` layout `(1,4+nc,N)` or `yolov5`/YOLOX `(1,N,5+nc)`), letterbox, class-aware NMS in NumPy, an optional second-stage plate detector, and a CRNN/CTC OCR ONNX run per row. Providers are tried in order: TensorRT, then CUDA, then CPU. `onnxruntime` is imported only when this engine is selected. |
+| `CommercialApiRecognizer` | `commercial` | Plate Recognizer Snapshot API (`Authorization: Token $PLATE_RECOGNIZER_API_KEY`) or the on-prem SDK URL, with `regions=in`. It detects and reads in one call. Each analysed frame is billable, so raise `pipeline.process_every_n` or `commercial.min_interval_s`. |
+| `ClassicalRecognizer` | `classical` | Pure OpenCV: MOG2 blobs, plate-guided splitting of merged blobs, a white/yellow plate finder, and template OCR against Hershey glyphs. **It is only good enough for the synthetic replay videos.** |
+
+Training: `tools/label_crops.py` labels crops, `tools/train_ocr.py` trains
+the CRNN+CTC model and exports the ONNX the service expects, and
+`tools/train_detector.md` covers the detector.
+
+## 3. Event contract
+
+`POST {BACKEND}/api/anpr/events` with header `X-Device-Key: <ANPR_API_KEY>`:
+
+```json
+{
+  "event_id": "5b0c0f5e-2f64-4c1e-9a53-3d8f0c1b7e21",
+  "gate_id": "G1",
+  "camera_ids": ["G1-L", "G1-R"],
+  "direction": "IN",
+  "wrong_way": false,
+  "vehicle_class": "BIKE",
+  "ts_ms": 1760000003923,
+  "status": "READ",
+  "plate": "MH14GX0786",
+  "confidence": 0.95,
+  "candidates": [{"plate": "MH14GX0786", "confidence": 0.95}, {"plate": "MH14OX0786", "confidence": 0.41}],
+  "images": {
+    "plate_crop": "2026/09/26/G1/5b0c0f5e-..._plate_crop.jpg",
+    "full_frame": "2026/09/26/G1/5b0c0f5e-..._full_frame.jpg",
+    "overview":   "2026/09/26/G1/5b0c0f5e-..._overview.jpg",
+    "extra": ["2026/09/26/G1/5b0c0f5e-..._extra1_G1-L_plate_crop.jpg",
+              "2026/09/26/G1/5b0c0f5e-..._extra1_G1-L_full_frame.jpg"]
+  },
+  "latency_ms": 640
+}
+```
+
+* `ts_ms` is the capture-line crossing (epoch ms, the earliest camera).
+* `status: "UNREAD"` has `plate: null`. `candidates` may still list
+  low-confidence guesses for the review queue.
+* Image paths are relative to `IMAGE_ROOT`. Any image kind can be `null`, for
+  example when there is no overview camera or no plate was ever seen.
+* Delivery is at-least-once and in order. The backend must be idempotent on
+  `event_id`. 2xx and 409 count as delivered. 5xx, 408, 425, 429, 401, 403 and
+  network errors are retried with exponential backoff (1 s doubling to 30 s,
+  with jitter) and nothing behind the failing event is sent first. Other 4xx
+  responses move the event to the `dead_letter` table and the queue continues.
+
+Heartbeat, every 10 s per camera: `POST {BACKEND}/api/devices/heartbeat`
+
+```json
+{"device_id": "G1-L", "kind": "CAMERA", "gate_id": "G1",
+ "metrics": {"fps": 25.0, "last_frame_ts_ms": 1760000003923, "read_rate": 0.97, "stream_ok": true, "queue_depth": 0}}
+```
+
+`read_rate` is the share of the last 100 crossings at this camera that were
+READ.
+
+Config refresh: `GET {BACKEND}/api/anpr/config` with `X-Device-Key` returns
+`{"gates":[{"id","name","direction","cameras":[{"id","role","rtsp_url","roi","capture_line","in_vector"}]}],"settings":{...}}`.
+Remote values override the YAML for those fields. Local-only fields such as
+`gate_span`, `gstreamer_pipeline` and `replay_file` are kept.
+
+## 4. Configuration reference (`anpr/config/site.example.yaml`)
+
+`${VAR}` and `${VAR:-default}` are expanded from the environment. The
+environment variables `BACKEND_URL`, `ANPR_API_KEY`, `IMAGE_ROOT` and
+`ANPR_OUTBOX` override the file.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `image_root` | `/data/images` | Shared image volume |
+| `outbox_path` | `/data/anpr/outbox.sqlite` | Durable outbox (WAL) |
+| `backend.url` / `api_key` | – | Empty URL means no posting (use `emitter.events_jsonl`) |
+| `backend.config_refresh_s` | 30 | Config poll period |
+| `recognizer.kind` | `classical` | `classical` / `onnx` / `commercial` |
+| `recognizer.onnx.*` | see file | model paths, `detector_format`, `detector_classes`, OCR input size, alphabet, blank index, providers |
+| `recognizer.commercial.*` | see file | `api_url`, `api_key_env`, `regions: [in]`, `min_interval_s` |
+| `plates.state_codes` | all states/UTs | Valid first two letters |
+| `plates.allow_bh` / `require_state_code` | true / true | Format rules |
+| `settings.merge_window_s` | 10 | Cross-camera merge window |
+| `settings.dedupe_window_s` | 60 | Same plate, same gate drop window |
+| `settings.min_confidence` | 0.6 | Below this, or an invalid format, gives UNREAD |
+| `settings.merge_hold_s` | 0.5 | Wait for the other camera (latency budget) |
+| `settings.unread_merge_s` / `unread_merge_dx` | 1.5 / 0.15 | UNREAD merge tolerances (time, gate-width fraction) |
+| `settings.heartbeat_s` / `camera_stale_s` | 10 / 3 | Heartbeat period; silent-camera timeout for merging |
+| `pipeline.process_every_n` | 1 | Analyse every n-th frame |
+| `pipeline.track_anchor` | `bottom` | Point tested against the capture line |
+| `pipeline.min_plate_width_px` / `min_sharpness` / `max_plate_occlusion` | 36 / 12 / 0.2 | Voting quality gate |
+| `pipeline.min_votes` / `post_cross_s` | 3 / 0.25 | Early finalisation / extra voting time |
+| `pipeline.tracker.*` | 0.2 / 0.6 / 12 / 2 | IoU threshold, centre-distance gate, max coast frames, min hits |
+| `ingest.*` | ffmpeg, tcp, 1→30 s | Capture backend, RTSP transport, reconnect backoff, read timeout, queue size |
+| `emitter.retry_initial_s` / `retry_max_s` / `events_jsonl` | 1 / 30 / null | Delivery backoff; optional audit copy |
+| `gates[].direction` | BOTH | IN / OUT / BOTH (the backend applies schedules) |
+| `gates[].cameras[]` | – | `id`, `role` (ANPR/OVERVIEW), `side`, `rtsp_url` or `gstreamer_pipeline` or `replay_file`, `roi` polygon, `capture_line` (2 points), `in_vector` (travel direction meaning IN, in image coordinates), `gate_span` (share of the gate width this camera covers at the capture line; LEFT defaults to 0–0.65, RIGHT to 0.35–1) |
+
+Coordinates can be pixels, or fractions of the frame when every value is at
+most 1. Rear-facing cameras at an **entry** gate see entering bikes ride away
+(upwards), so `in_vector: [0, -1]`. At an **exit** gate the same mounting sees
+leaving bikes ride away, so `in_vector: [0, 1]`.
+
+## 5. Evaluation (spec Section 15)
+
+`python -m anpr_service evaluate --labels <dir> [--config site.yaml] [--out report.json]`
+runs the pipeline over every `ground_truth.json` label set under `<dir>`. The
+format is the one written by `synth`. For real clips, list the plate,
+`cross_ms` (offset from the clip start), `visible_in` cameras and
+`side_by_side` for each vehicle. The report gives, per camera and per gate:
+exact-match accuracy, approximate-match rate (confusion-aware, Levenshtein
+≤ 1), read rate, the side-by-side subset, missed vehicles, extra
+(duplicate/false) events, and UNREAD handling of unreadable plates.
+
+Result on the bundled synthetic scenes (2 gates, 9 vehicles each: a
+side-by-side pair, a middle bike seen by both cameras, a staggered partly
+occluded pair, a BH plate, a single-line plus two-line pair and an
+unreadable plate): 100% exact at camera and gate level, one event per
+vehicle, and the unreadable plate emitted as UNREAD. **This measures the
+plumbing, not real-world accuracy.**
+
+## 6. Camera tuning summary
+
+The full procedure belongs in `docs/CAMERA_SETUP.md`. The key numbers:
+
+* Plate width at least **130 px** (150 px preferred) at the capture line, at
+  4 MP (2560×1440), with each camera covering half the gate and about 30%
+  overlap.
+* Shutter **1/1000 s or faster** (1/2000 s at night with IR) to freeze
+  15–20 km/h. Fix gain and shutter; do not let auto-exposure lengthen the
+  shutter at dusk.
+* Mount 2.5–3 m high, 5–7 m behind the capture line, with vertical angle
+  under 30° and horizontal angle under 20° to the plate. WDR on, 850 nm IR.
+* Put the capture line where plates are largest and still fully in frame.
+  Draw the ROI to exclude the far background. Set `gate_span` for each camera
+  to the part of the gate width it covers at the line; UNREAD merging needs
+  it.
+* Validate with `evaluate` on recorded pilot clips before copying settings
+  to the second gate. Target read rate is at least 95% by day and 90% at
+  night.
+
+## 7. Licence table (models and libraries)
+
+| Component | Licence | Used for | Closed-deployment note |
+|---|---|---|---|
+| This service's code (tracker, Hungarian, voting, classical engine) | project licence | everything | Original code; no AGPL/GPL code copied |
+| OpenCV (`opencv-python-headless`) | Apache-2.0 | video I/O, image ops, MOG2, Hershey fonts | OK |
+| FFmpeg (bundled in the OpenCV wheel) | LGPL-2.1+ | RTSP/H.264/H.265 decoding | LGPL build: OK with dynamic linking and notices. A custom FFmpeg built with `--enable-gpl` (x264/x265) becomes **GPL**. H.265 decoding may carry patent-pool obligations. |
+| GStreamer (optional, OpenCV built with it) | LGPL-2.1 | hardware-decode pipelines | Core and "good" plugins are OK. Check "bad"/"ugly" plugins (patents, some GPL). NVIDIA DeepStream / `nvv4l2decoder` fall under the NVIDIA licence. |
+| NumPy, SciPy (optional) | BSD-3-Clause | arrays, assignment | OK |
+| httpx | BSD-3-Clause | backend client | OK |
+| pydantic | MIT | config | OK |
+| PyYAML | MIT | config | OK |
+| ONNX Runtime / onnxruntime-gpu | MIT | inference | OK. CUDA, cuDNN and TensorRT libraries are under the **NVIDIA EULA**: redistribution is allowed only as the EULA permits, which is fine inside the `nvidia/cuda` base image. |
+| `nvidia/cuda` base image | NVIDIA Deep Learning Container licence | Docker base | OK for deployment on NVIDIA GPUs; review before redistributing images |
+| PyTorch (training only) | BSD-3-Clause | `tools/train_ocr.py` | OK |
+| **Ultralytics YOLOv5 / YOLOv8 / YOLO11** | **AGPL-3.0** | (alternative detector) | **Needs an Ultralytics Enterprise licence** for a closed or commercial deployment. Otherwise the whole service must be released under AGPL. Not used by default. |
+| YOLOX (Megvii) | Apache-2.0 | recommended detector | OK |
+| RT-DETR (lyuwenyu / PaddleDetection) | Apache-2.0 | alternative detector | OK |
+| PaddleOCR (PP-OCR models) | Apache-2.0 | alternative OCR | OK |
+| fast-plate-ocr / fast-alpr | MIT | alternative plate OCR models | OK. Check the licence of each pre-trained model's dataset. |
+| EasyOCR, Tesseract | Apache-2.0 | generic OCR (weak on two-line plates) | OK |
+| OpenALPR (open-source edition) | AGPL-3.0 | – | Avoid, or buy a commercial licence |
+| Plate Recognizer (Snapshot API / SDK) | Commercial subscription | `CommercialApiRecognizer` | Paid per lookup or per camera. The cloud API sends images off-site (DPDP Act consent and notice); the on-prem SDK keeps them local. |
+| NVIDIA TAO LPDNet / LPRNet | NVIDIA model licence | alternative models | Allowed on NVIDIA hardware; read the terms |
+| CVAT / Label Studio | MIT / Apache-2.0 | dataset labelling | OK |
+
+## 8. Assumptions and limitations
+
+* **The classical engine is a demo engine.** It reads the synthetic videos,
+  which use flat colours, a static background and Hershey-font plates, at
+  100%. On real footage it will fail: headlights, shadows and real fonts
+  break background subtraction and template OCR. Production needs the `onnx`
+  engine with models trained on site data, or the commercial engine. No
+  trained model weights are shipped.
+* Occlusion handling uses box geometry: a nearer box covering the plate
+  means the frame is skipped. With a detector trained on real data, boxes are
+  tighter and fewer frames are skipped.
+* The lateral position used for UNREAD merging depends on each camera's
+  `gate_span`. Set it during camera commissioning.
+* `latency_ms` measures the pipeline (crossing to event queued). Time spent
+  in the outbox while the backend is down is not included.
+* Event dates in image paths use the container's local time zone
+  (`TZ=Asia/Kolkata`).
+* Late reads within the merge window after an event has been sent are folded
+  in (logged and counted) but not re-posted. The backend contract has no
+  "update event" call, so the late camera's images are not attached.

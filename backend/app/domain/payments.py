@@ -414,7 +414,8 @@ def record_cash(db: Session, q: Quote, *, user: User, purpose: str = "SESSION", 
     ov = _apply_override(db, q, override_paise, override_reason, supervisor_pin, user.id)
     _check_payable(q)
     at = client_created_at or utcnow()
-    shift = cash.current_shift(db, user.id, at=at) or cash.open_shift(db, user, at=at)
+    shift = (cash.current_shift(db, user.id, at=at) if offline_sync else None) or cash.current_shift(db, user.id) \
+        or cash.open_shift(db, user, at=at)
     limit = int(get_setting(db, "cash_limit_paise"))
     held = cash.cash_in_hand(db, user.id, shift.id)
     breach = held + q.amount_paise > limit

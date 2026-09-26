@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 import logging
 import random
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -257,10 +257,11 @@ COLORS = [
 ]
 
 
-def default_vehicles(compact: bool = False, seed: int = 7) -> list[SynthVehicle]:
+def default_vehicles(compact: bool = False, seed: int = 7, wrong_way: bool = False) -> list[SynthVehicle]:
     """The reference scene: side-by-side pair, a middle bike seen by both
     cameras, a staggered/partly occluded pair, a BH-series plate and an
-    unreadable plate."""
+    unreadable plate.  ``wrong_way`` adds a bike riding towards the cameras
+    at the end (emitted with ``wrong_way=true`` on an IN gate)."""
     rnd = random.Random(seed)
 
     def colours(i: int) -> dict[str, Any]:
@@ -287,6 +288,10 @@ def default_vehicles(compact: bool = False, seed: int = 7) -> list[SynthVehicle]
         vs[6].side_by_side = True
     else:
         vs.append(SynthVehicle("MH04XY0000", "two_line", 0.78, 7.4, 3.5, unreadable=True, **colours(3)))
+    if wrong_way:
+        last = max(v.cross_s for v in vs)
+        vs.append(SynthVehicle("MH20EE7777", "two_line", 0.5, last + 1.0, 3.0, z_start=15.0, direction=-1,
+                               font=FONTS[0], **colours(4)))
     for i, v in enumerate(vs, 1):
         v.vid = f"V{i}"
         v.speed_mps += rnd.uniform(-0.05, 0.05)
@@ -295,8 +300,8 @@ def default_vehicles(compact: bool = False, seed: int = 7) -> list[SynthVehicle]
 
 def default_scenario(gate_id: str = "G1", width: int = 1280, height: int = 720, fps: float = 25.0,
                      compact: bool = False, overview: bool = True, ext: str = ".mp4",
-                     seed: int = 7) -> SynthScenario:
-    vehicles = default_vehicles(compact=compact, seed=seed)
+                     seed: int = 7, wrong_way: bool = False) -> SynthScenario:
+    vehicles = default_vehicles(compact=compact, seed=seed, wrong_way=wrong_way)
     duration = max(v.cross_s for v in vehicles) + 2.0
     cams = [
         SynthCamera(f"{gate_id}-L", "ANPR", SPANS["L"], f"{gate_id}-L{ext}"),
@@ -395,30 +400,32 @@ def build_ground_truth(sc: SynthScenario) -> dict[str, Any]:
 
 def camera_entries(gt: dict[str, Any], base_dir: Path) -> list[dict[str, Any]]:
     """Camera config entries for a rendered scenario."""
-    return [
-        {
+    out = []
+    for c in gt["cameras"]:
+        entry = {
             "id": c["id"],
-            "role": c["role"],
+            "role": c.get("role", "ANPR"),
             "replay_file": str((base_dir / c["file"]).resolve()),
-            "roi": gt["roi"],
-            "capture_line": gt["capture_line"],
-            "in_vector": gt["in_vector"],
-            "gate_span": c["gate_span"],
+            "roi": c.get("roi", gt.get("roi")),
+            "capture_line": c.get("capture_line", gt.get("capture_line")),
+            "in_vector": c.get("in_vector", gt.get("in_vector", [0.0, -1.0])),
         }
-        for c in gt["cameras"]
-    ]
+        if c.get("gate_span"):
+            entry["gate_span"] = c["gate_span"]
+        out.append(entry)
+    return out
 
 
 def generate(out_dir: str | Path, gates: list[str] | None = None, width: int = 1280, height: int = 720,
              fps: float = 25.0, compact: bool = False, overview: bool = True, ext: str = ".mp4",
-             seed: int = 7) -> Path:
+             seed: int = 7, wrong_way: bool = False) -> Path:
     """Render one scenario per gate and write ``site.synth.yaml``.  Returns the config path."""
     out = Path(out_dir).resolve()
     out.mkdir(parents=True, exist_ok=True)
     gate_entries = []
     for gi, gate_id in enumerate(gates or ["G1", "G2"]):
         sc = default_scenario(gate_id, width, height, fps, compact=compact, overview=overview, ext=ext,
-                              seed=seed + gi)
+                              seed=seed + gi, wrong_way=wrong_way)
         gdir = out / gate_id
         gt = render_scenario(sc, gdir)
         gate_entries.append({
@@ -438,9 +445,4 @@ def generate(out_dir: str | Path, gates: list[str] | None = None, width: int = 1
     }
     cfg_path = out / "site.synth.yaml"
     cfg_path.write_text(yaml.safe_dump(cfg, sort_keys=False), encoding="utf-8")
-    (out / "scenario.json").write_text(
-        json.dumps({g: [asdict(v) for v in default_vehicles(compact, seed + i)] for i, g in enumerate(gates or ["G1", "G2"])},
-                   indent=2, default=str),
-        encoding="utf-8",
-    )
     return cfg_path

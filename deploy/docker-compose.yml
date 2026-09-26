@@ -1,0 +1,72 @@
+# Edge server stack (Ubuntu 24.04, NVIDIA GPU). Everything that records entries/exits runs here
+# and keeps working without internet. Start with ./install.sh, or:  docker compose up -d
+name: parking
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: parking
+      POSTGRES_USER: parking
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      TZ: Asia/Kolkata
+    command: ["postgres", "-c", "shared_buffers=2GB", "-c", "effective_cache_size=8GB", "-c", "max_connections=100",
+              "-c", "wal_compression=on", "-c", "checkpoint_timeout=15min"]
+    volumes:
+      - ${PG_DATA_DIR:-/srv/parking/pgdata}:/var/lib/postgresql/data     # NVMe
+    ports:
+      - "127.0.0.1:5432:5432"          # host-side backup/restore scripts only
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U parking -d parking"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    image: parking-backend:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      PARK_DATABASE_URL: postgresql+psycopg://parking:${DB_PASSWORD}@db:5432/parking
+      PARK_IMAGE_ROOT: /data/images
+      PARK_UPLOAD_ROOT: /data/uploads
+      TZ: Asia/Kolkata
+    volumes:
+      - ${IMAGE_DIR:-/srv/parking/images}:/data/images                # 4 TB HDD
+      - ${UPLOAD_DIR:-/srv/parking/uploads}:/data/uploads
+    ports:
+      - "8000:8000"                    # LAN: dashboard, worker phones, alert units
+    stop_grace_period: 20s
+
+  anpr:
+    build:
+      context: ../anpr
+    image: parking-anpr:latest
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      BACKEND_URL: http://backend:8000
+      ANPR_API_KEY: ${PARK_ANPR_API_KEY}
+      IMAGE_ROOT: /data/images
+      ANPR_OUTBOX: /data/anpr/outbox.sqlite
+      TZ: Asia/Kolkata
+    volumes:
+      - ./config/site.yaml:/config/site.yaml:ro
+      - ${IMAGE_DIR:-/srv/parking/images}:/data/images
+      - ${ANPR_STATE_DIR:-/srv/parking/anpr}:/data/anpr               # durable event outbox
+      - ${MODEL_DIR:-/srv/parking/models}:/models:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

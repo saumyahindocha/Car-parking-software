@@ -23,11 +23,11 @@ from .config import CameraConfig, GateConfig, ServiceConfig
 from .geometry import (
     Point,
     box_anchor,
+    box_center,
     covered_fraction,
     expand_box,
     point_in_polygon,
     resolve_points,
-    box_center,
     segment_crossing,
     travel_sign,
 )

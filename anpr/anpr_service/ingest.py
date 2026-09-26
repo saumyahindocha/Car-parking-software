@@ -167,7 +167,9 @@ class RtspSource(FrameSource):
         if self.cfg.api_preference == "ffmpeg":
             os.environ.setdefault(
                 "OPENCV_FFMPEG_CAPTURE_OPTIONS",
-                f"rtsp_transport;{self.cfg.rtsp_transport}|stimeout;{int(self.cfg.read_timeout_s * 1e6)}",
+                # "timeout" (FFmpeg >= 5) and "stimeout" (FFmpeg 4) are the RTSP socket timeouts in us.
+                f"rtsp_transport;{self.cfg.rtsp_transport}|timeout;{int(self.cfg.read_timeout_s * 1e6)}"
+                f"|stimeout;{int(self.cfg.read_timeout_s * 1e6)}",
             )
             cap = cv2.VideoCapture(self.url, cv2.CAP_FFMPEG)
         elif self.cfg.api_preference == "gstreamer":

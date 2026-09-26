@@ -159,3 +159,24 @@ def test_ledger_is_append_only(db, gateway, messenger):
     db.delete(e)
     with pytest.raises(AppendOnlyViolation):
         db.flush()
+
+
+def test_confident_exit_read_rehomes_misread_entry(db, gateway, messenger):
+    r = event(db, "IN", "MH43AB1Z35", T0, conf=0.7)            # misread at entry, low confidence
+    w = worker(db)
+    payments.record_cash(db, quote_session(db, r.session.id, 240), user=w)
+    ghost = r.session.vehicle
+    out = event(db, "OUT", "MH43AB1234", T0 + timedelta(hours=3), conf=0.97)
+    assert out.event.match_type == "APPROX"
+    v = db.scalars(select(Vehicle).where(Vehicle.plate == "MH43AB1234")).one()
+    assert out.session.vehicle_id == v.id
+    assert v.balance_paise == 1500 - 2000 and ghost.balance_paise == 0      # ₹15 charge, ₹20 paid moved over
+    assert ledger.verify_balances(db) == []
+
+
+def test_supervisor_typed_plate_finds_misread_open_session(db, gateway, messenger):
+    r = event(db, "IN", "MH43AB1Z35", T0, conf=0.7)
+    out = event(db, "OUT", None, T0 + timedelta(hours=1), status="UNREAD", conf=0.0)
+    res = resolve_event(db, out.event.id, user_id=worker(db, "sup1").id, plate="MH43AB1234")
+    assert res.session.id == r.session.id and res.session.status in (SessionStatus.CLOSED, SessionStatus.SETTLED)
+    assert res.session.vehicle.plate == "MH43AB1234"

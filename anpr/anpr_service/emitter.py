@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import random
-import threading
 import time
 from typing import Callable
 
@@ -108,16 +107,13 @@ class Emitter:
             remaining = deadline_s - (time.monotonic() - start)
             self.sleep(max(0.0, min(wait, remaining, 1.0)))
 
-    def run(self, stop: threading.Event | None = None, idle_s: float = 0.05,
-            should_stop: Callable[[], bool] | None = None) -> None:
-        """Deliver forever (until ``stop`` is set or ``should_stop()`` returns True)."""
+    def run(self, should_stop: Callable[[], bool], idle_s: float = 0.05) -> None:
+        """Deliver until ``should_stop()`` returns True (checked between attempts)."""
         while True:
-            if stop is not None and stop.is_set():
+            if should_stop():
                 return
             res = self.deliver_once()
             if res is None:
-                if should_stop is not None and should_stop():
-                    return
                 self.sleep(idle_s)
             elif res is False:
                 head = self.outbox.head()

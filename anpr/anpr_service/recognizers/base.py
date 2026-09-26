@@ -40,8 +40,28 @@ class PlateRecognizer(ABC):
         """Release models / sessions / HTTP clients."""
 
 
+MAX_PLATE_ELEVATION = 4.0
+
+
+def plate_plausible(vehicle: Box, plate: Box, max_elevation: float = MAX_PLATE_ELEVATION) -> bool:
+    """Can ``plate`` physically belong to ``vehicle``?
+
+    A rear plate sits low on the vehicle: its centre is at most
+    ``max_elevation`` plate-widths above the bottom (ground contact) of the
+    vehicle box (bikes ~1.3-2, cars <1.5).  A plate much higher than that
+    inside a big near-vehicle box belongs to a farther vehicle that the near
+    one partly hides.
+    """
+    pw = max(plate[2] - plate[0], 1.0)
+    pcy = (plate[1] + plate[3]) / 2.0
+    return (vehicle[3] - pcy) <= max_elevation * pw
+
+
 def associate_plates(
-    vehicles: Sequence[Box], plates: Sequence[PlateObservation], min_containment: float = 0.6
+    vehicles: Sequence[Box],
+    plates: Sequence[PlateObservation],
+    min_containment: float = 0.6,
+    max_elevation: float = MAX_PLATE_ELEVATION,
 ) -> list[PlateObservation | None]:
     """Assign each plate to the vehicle box that contains it.
 
@@ -64,7 +84,7 @@ def associate_plates(
             if assigned[vi] is not None:
                 continue
             contain = intersection(pb, vb) / area
-            if contain < min_containment:
+            if contain < min_containment or not plate_plausible(vb, pb, max_elevation):
                 continue
             pcx = (pb[0] + pb[2]) / 2
             vcx = (vb[0] + vb[2]) / 2

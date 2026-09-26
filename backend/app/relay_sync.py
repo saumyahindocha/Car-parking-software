@@ -147,6 +147,14 @@ def apply_message(db: Session, msg: dict) -> dict:
         if v is not None and not v.phone:
             v.phone = "".join(c for c in p["phone"] if c.isdigit())[-10:]
         result = {"ok": v is not None}
+    elif kind == "DATA_REQUEST":
+        from .models import Alert
+
+        a = Alert(kind="DATA_REQUEST", severity="INFO", message=f"Customer data request ({p.get('request_type', 'access')}) "
+                  f"for {p.get('plate', '?')}", data={k: v for k, v in p.items() if k != "phone"})
+        db.add(a)
+        db.flush()
+        result = {"alert_id": a.id}
     else:
         result = {"error": f"unknown kind {kind}"}
     db.add(RelayInbox(msg_id=msg["id"], kind=kind, payload=p, result=result))

@@ -40,8 +40,8 @@ class KalmanBoxFilter:
         self.H = np.zeros((4, 8))
         self.H[:4, :4] = np.eye(4)
         scale = max(w, h, 1.0)
-        self.P = np.diag([scale, scale, scale, scale, 4 * scale, 4 * scale, scale, scale]) ** 1.0
-        self._scale = scale
+        # Position is known well from the first box, velocity not at all.
+        self.P = np.diag([scale, scale, scale, scale, 4 * scale, 4 * scale, scale, scale])
         self.age_since_update = 0
 
     def _process_noise(self) -> np.ndarray:
@@ -93,10 +93,6 @@ class Track:
     last_box: Box = (0.0, 0.0, 0.0, 0.0)
     history: list[Box] = field(default_factory=list)
 
-    @property
-    def confirmed(self) -> bool:
-        return self.hits >= 1 and self.time_since_update == 0
-
 
 @dataclass
 class TrackUpdate:
@@ -132,19 +128,19 @@ class SortTracker:
 
         for ti, di in matches:
             t = self._tracks[ti]
-            box = tuple(float(v) for v in dets[di])
-            t.kf.update(box)  # type: ignore[arg-type]
+            box = _as_box(dets[di])
+            t.kf.update(box)
             t.hits += 1
             t.time_since_update = 0
-            t.last_box = box  # type: ignore[assignment]
-            t.history.append(box)  # type: ignore[arg-type]
+            t.last_box = box
+            t.history.append(box)
             if len(t.history) > 64:
                 del t.history[0]
         for ti in unmatched_tracks:
             self._tracks[ti].time_since_update += 1
         for di in unmatched_dets:
-            box = tuple(float(v) for v in dets[di])
-            track = Track(track_id=self._next_id, kf=KalmanBoxFilter(box), last_box=box, history=[box])  # type: ignore[arg-type]
+            box = _as_box(dets[di])
+            track = Track(track_id=self._next_id, kf=KalmanBoxFilter(box), last_box=box, history=[box])
             self._next_id += 1
             self._tracks.append(track)
             matches.append((len(self._tracks) - 1, di))
@@ -160,9 +156,9 @@ class SortTracker:
             if t.time_since_update > p.max_age:
                 continue
             keep.append(t)
-            di = det_for_track.get(idx)
-            box = t.last_box if di is not None else t.kf.box
-            out.append(TrackUpdate(t.track_id, box, di, t.hits, t.time_since_update))
+            det = det_for_track.get(idx)
+            out.append(TrackUpdate(t.track_id, t.last_box if det is not None else t.kf.box, det, t.hits,
+                                   t.time_since_update))
         self._tracks = keep
         return out
 
@@ -196,6 +192,10 @@ class SortTracker:
             [i for i in range(n_t) if i not in mt],
             [j for j in range(n_d) if j not in md],
         )
+
+
+def _as_box(row: np.ndarray) -> Box:
+    return (float(row[0]), float(row[1]), float(row[2]), float(row[3]))
 
 
 def _to_cxcywh(box: Box) -> tuple[float, float, float, float]:

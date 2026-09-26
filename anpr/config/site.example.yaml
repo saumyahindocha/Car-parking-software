@@ -1,0 +1,140 @@
+# ANPR edge service - example site configuration (2 gates x (2 ANPR + 1 overview) cameras).
+#
+# ${VAR} / ${VAR:-default} are expanded from the environment.  BACKEND_URL,
+# ANPR_API_KEY, IMAGE_ROOT and ANPR_OUTBOX env vars override the file.
+#
+# Coordinates (roi, capture_line) may be given in pixels of the camera stream
+# or as fractions 0..1 of the frame (when every value is <= 1.0).  The values
+# below are fractions and match the synthetic replay scene
+# (`python -m anpr_service synth`): capture line at 62% of the frame height,
+# vehicles ride away from the rear-facing cameras (upwards in the image),
+# hence in_vector [0, -1] for IN.
+#
+# Gate direction, camera URLs/ROIs/lines and merge/dedupe settings are
+# refreshed from GET {backend}/api/anpr/config every config_refresh_s; the
+# backend resolves time-of-day direction schedules.
+
+site_id: railway-station-lot
+image_root: ${IMAGE_ROOT:-/data/images}          # shared volume with the backend
+outbox_path: ${ANPR_OUTBOX:-/data/anpr/outbox.sqlite}
+log_level: INFO
+
+backend:
+  url: ${BACKEND_URL:-http://backend:8000}
+  api_key: ${ANPR_API_KEY:-}
+  config_refresh_s: 30
+  timeout_s: 3
+
+recognizer:
+  # classical  - pure OpenCV, reads the synthetic demo videos only (no models needed)
+  # onnx       - local detector + CRNN OCR on ONNX Runtime (CUDA/TensorRT on the edge GPU)
+  # commercial - Plate Recognizer Snapshot API / on-prem SDK (regions=in)
+  kind: ${ANPR_RECOGNIZER:-classical}
+  onnx:
+    detector_model: /models/vehicle_plate_detector.onnx
+    detector_format: auto            # yolov8 (1,4+nc,N) | yolov5/YOLOX (1,N,5+nc)
+    detector_input_size: 640
+    detector_classes: {0: BIKE, 1: CAR, 2: OTHER, 3: PLATE}
+    plate_detector_model: null       # optional 2nd stage on vehicle crops
+    conf_threshold: 0.35
+    nms_iou: 0.5
+    ocr_model: /models/plate_ocr_crnn.onnx
+    ocr_alphabet: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    ocr_blank_index: 0
+    ocr_input_height: 32
+    ocr_input_width: 128
+    providers: [TensorrtExecutionProvider, CUDAExecutionProvider, CPUExecutionProvider]
+  commercial:
+    api_url: https://api.platerecognizer.com/v1/plate-reader/   # or http://<sdk-host>:8080/v1/plate-reader/
+    api_key_env: PLATE_RECOGNIZER_API_KEY
+    regions: [in]
+    min_interval_s: 0.0
+
+plates:
+  allow_bh: true
+  require_state_code: true
+  # state_codes: [MH, GJ, KA, ...]   # default: every Indian state / UT code
+
+settings:                 # overridden by the backend's "settings" block
+  merge_window_s: 10      # cross-camera merge of the same plate at a gate
+  dedupe_window_s: 60     # same plate, same gate -> dropped
+  min_confidence: 0.6     # below this (or not a valid Indian format) -> UNREAD
+  merge_hold_s: 0.5       # wait for the other camera of the same crossing (latency budget)
+  unread_merge_s: 1.5
+  unread_merge_dx: 0.15   # fraction of the gate width
+  heartbeat_s: 10
+  camera_stale_s: 3
+
+pipeline:
+  process_every_n: 1      # raise for the commercial API (billable per frame)
+  track_anchor: bottom    # bottom-centre of the vehicle box crosses the capture line
+  min_plate_width_px: 36
+  min_sharpness: 12
+  max_plate_occlusion: 0.2
+  min_votes: 3
+  post_cross_s: 0.25
+  jpeg_quality: 88
+  full_frame_max_width: 1920
+  tracker: {iou_threshold: 0.2, max_center_distance: 0.6, max_age: 12, min_hits: 2}
+
+ingest:
+  api_preference: ffmpeg  # ffmpeg | gstreamer | any
+  rtsp_transport: tcp
+  reconnect_initial_s: 1
+  reconnect_max_s: 30
+  read_timeout_s: 5
+  queue_size: 50
+
+emitter:
+  retry_initial_s: 1
+  retry_max_s: 30
+  events_jsonl: null      # e.g. /data/anpr/events.jsonl for an audit copy
+
+gates:
+  - id: G1
+    name: Gate 1 (North)
+    direction: IN
+    cameras:
+      - id: G1-L
+        role: ANPR
+        side: LEFT
+        rtsp_url: rtsp://anpr:${CAMERA_PASSWORD:-changeme}@10.10.1.11:554/Streaming/Channels/101
+        # gstreamer_pipeline: "rtspsrc location=rtsp://... latency=100 ! rtph265depay ! h265parse ! nvv4l2decoder ! nvvidconv ! video/x-raw,format=BGRx ! videoconvert ! appsink drop=1"
+        roi: [[0.0, 0.12], [1.0, 0.12], [1.0, 1.0], [0.0, 1.0]]
+        capture_line: [[0.0, 0.62], [1.0, 0.62]]
+        in_vector: [0, -1]
+        gate_span: [0.0, 0.65]    # left 65% of the gate width at the capture line (~30% overlap)
+      - id: G1-R
+        role: ANPR
+        side: RIGHT
+        rtsp_url: rtsp://anpr:${CAMERA_PASSWORD:-changeme}@10.10.1.12:554/Streaming/Channels/101
+        roi: [[0.0, 0.12], [1.0, 0.12], [1.0, 1.0], [0.0, 1.0]]
+        capture_line: [[0.0, 0.62], [1.0, 0.62]]
+        in_vector: [0, -1]
+        gate_span: [0.35, 1.0]
+      - id: G1-O
+        role: OVERVIEW
+        rtsp_url: rtsp://anpr:${CAMERA_PASSWORD:-changeme}@10.10.1.13:554/Streaming/Channels/102
+  - id: G2
+    name: Gate 2 (South)
+    direction: OUT
+    cameras:
+      - id: G2-L
+        role: ANPR
+        side: LEFT
+        rtsp_url: rtsp://anpr:${CAMERA_PASSWORD:-changeme}@10.10.2.11:554/Streaming/Channels/101
+        roi: [[0.0, 0.12], [1.0, 0.12], [1.0, 1.0], [0.0, 1.0]]
+        capture_line: [[0.0, 0.62], [1.0, 0.62]]
+        in_vector: [0, 1]         # exit gate: rear view of LEAVING bikes, so IN = towards the camera
+        gate_span: [0.0, 0.65]
+      - id: G2-R
+        role: ANPR
+        side: RIGHT
+        rtsp_url: rtsp://anpr:${CAMERA_PASSWORD:-changeme}@10.10.2.12:554/Streaming/Channels/101
+        roi: [[0.0, 0.12], [1.0, 0.12], [1.0, 1.0], [0.0, 1.0]]
+        capture_line: [[0.0, 0.62], [1.0, 0.62]]
+        in_vector: [0, 1]
+        gate_span: [0.35, 1.0]
+      - id: G2-O
+        role: OVERVIEW
+        rtsp_url: rtsp://anpr:${CAMERA_PASSWORD:-changeme}@10.10.2.13:554/Streaming/Channels/102

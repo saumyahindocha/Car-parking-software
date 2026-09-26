@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="{{ lang }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>{% block title %}{{ lot.lot_name }}{% endblock %}</title>
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/app.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <a class="brand" href="/">{{ lot.lot_name }}</a>
+  <nav class="langs" aria-label="Language">
+    {% for code, label in langs.items() %}<a href="{{ path }}?lang={{ code }}" lang="{{ code }}"{% if code == lang %} aria-current="true"{% endif %}>{{ label }}</a>{% endfor %}
+  </nav>
+</header>
+{% if demo %}<p class="demo-banner" role="note">DEMO MODE - no real money is collected</p>{% endif %}
+<main id="main">
+{% block content %}{% endblock %}
+</main>
+<footer class="foot">
+  <a href="/">{{ t('back_home') }}</a> · <a href="/privacy">{{ t('privacy') }}</a>{% if authed %} · <a href="/logout">{{ t('logout') }}</a>{% endif %}
+</footer>
+</body>
+</html>

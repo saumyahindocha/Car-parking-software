@@ -100,39 +100,7 @@ class CorrectIn(BaseModel):
 @router.post("/sessions/{session_id}/correct-plate")
 def correct_plate(session_id: int, body: CorrectIn, db: Session = Depends(get_db), user: User = Depends(collector)):
     """Worker says the ANPR read is wrong. Moves an unpaid session to the right vehicle; logged for review."""
-    s = db.get(ParkingSession, session_id)
-    if s is None or s.status not in (SessionStatus.OPEN, SessionStatus.PREPAID, SessionStatus.PASS):
-        raise HTTPException(400, "only open sessions can be corrected")
-    norm = plates.normalise(body.plate)
-    corr = plates.correct(norm, get_setting(db, "state_codes"))
-    norm = corr.plate if corr.valid else norm
-    if not norm or len(norm) < 6:
-        raise HTTPException(400, "enter the full plate")
-    old = db.get(Vehicle, s.vehicle_id)
-    if old.plate == norm:
-        return session_json(db, s)
-    paid = db.scalar(select(func.count(Payment.id)).where(Payment.session_id == s.id)) or 0
-    if paid:
-        raise HTTPException(400, "session already has a payment; ask a supervisor")
-    target = sess_svc.get_or_create_vehicle(db, norm, s.vehicle_class, s.entry_at)
-    if sess_svc.open_session_for(db, target.id) is not None:
-        raise HTTPException(409, f"{target.display_plate} already has an open session; ask a supervisor")
-    ev = db.get(AnprEvent, s.entry_event_id) if s.entry_event_id else None
-    db.add(PlateCorrection(event_id=ev.id if ev else None, session_id=s.id, camera_ids=ev.camera_ids if ev else [],
-                           raw_plate=old.plate, chosen_plate=norm, source="WORKER", user_id=user.id))
-    s.vehicle_id = target.id
-    from ..domain.lookup import active_pass, get_tariff
-
-    p = active_pass(db, target.id, s.entry_at)
-    if p is not None:
-        s.status, s.pass_id, s.tariff_id = SessionStatus.PASS, p.id, None
-    elif s.status == SessionStatus.PASS:
-        s.status, s.pass_id = SessionStatus.OPEN, None
-        s.tariff_id = get_tariff(db, s.vehicle_class, s.entry_at).id
-    if ev is not None:
-        ev.review_reason = "WORKER_CORRECTED"
-        ev.matched_plate = norm
-        ev.vehicle_id = target.id
+    s = sess_svc.correct_session_plate(db, session_id, body.plate, user_id=user.id)
     db.commit()
     return session_json(db, s)
 

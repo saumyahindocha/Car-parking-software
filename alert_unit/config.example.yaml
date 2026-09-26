@@ -1,0 +1,38 @@
+# Exit alert unit configuration. Copy to /etc/alert-unit/config.yaml.
+# Every key can also be set by environment variable: ALERT_EDGE_URL, ALERT_DEVICE_KEY,
+# nested ones with a double underscore: ALERT_PINS__RED=17, ALERT_TIMING__RED_HOLD_S=5, ...
+
+edge_url: http://192.168.10.10:8000   # edge server (backend) base URL
+device_key: change-me                 # = PARK_DEVICE_API_KEY on the edge server
+gate_id: G2                           # which gate's exits to show
+device_id: AU-G2                      # shown in the dashboard's device health list
+mock_gpio: null                       # null = auto (real relays only on a Raspberry Pi); true = never touch GPIO
+log_level: INFO
+
+pins:                  # BCM numbers of the relay board inputs
+  red: 17              # relay CH1 -> red lamp of the tower light
+  green: 27            # relay CH2 -> green lamp
+  buzzer: 22           # optional 3rd channel -> buzzer; null if the buzzer is not wired
+  active_low: true     # most opto-isolated relay boards switch ON when the input is LOW
+  green_on_nc: false   # true if green is wired through the NC contact (stays green if the Pi dies)
+
+timing:
+  red_hold_s: 5          # red light + plate + image + amount due, then back to green
+  green_hold_s: 6        # "Thank you" card, then the idle screen
+  neutral_hold_s: 6      # unread / unknown plates (never red)
+  buzzer_s: 0.6          # short beep on red
+  max_slots: 2           # vehicles side by side (1..3)
+  ping_interval_s: 10
+  heartbeat_interval_s: 15
+  backoff_initial_s: 1
+  backoff_max_s: 30
+  pass_expiry_warn_days: 5   # keep equal to the edge setting pass_expiry_warn_days
+
+display:
+  mode: fullscreen       # fullscreen | windowed | headless
+  width: 1920            # used for windowed/headless/screenshot
+  height: 1080
+  fps: 20
+  font_path: null        # default: DejaVu Sans Bold (has the ₹ glyph)
+  title: Exit            # "Exit" -> "Exit - Gate G2"
+  show_images: true

@@ -9,5 +9,4 @@ PyYAML>=6.0
 #   onnxruntime-gpu>=1.17    (CUDA 12 / TensorRT)  -> LocalOnnxRecognizer on the edge GPU
 # Optional speed-up for the tracker's assignment step:
 #   scipy>=1.11
-# Development / tests:
-pytest>=8
+# Development / tests: see requirements-dev.txt

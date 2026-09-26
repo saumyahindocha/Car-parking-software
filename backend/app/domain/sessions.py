@@ -44,7 +44,7 @@ def find_vehicle(db: Session, plate: str) -> Optional[Vehicle]:
 def get_or_create_vehicle(db: Session, plate: str, vehicle_class: str, seen_at: datetime) -> Vehicle:
     v = find_vehicle(db, plate)
     if v is None:
-        v = Vehicle(plate=plate, display_plate=plates.display(plate), vehicle_class=vehicle_class,
+        v = Vehicle(plate=plate, plate_canon=plates.canonical(plate), display_plate=plates.display(plate), vehicle_class=vehicle_class,
                     first_seen=seen_at, last_seen=seen_at, balance_paise=0)
         db.add(v)
         db.flush()
@@ -92,54 +92,60 @@ class ProcessResult:
 
 
 # ------------------------------------------------------------------ approximate matching
-def _known_regulars(db: Session, vehicle_class: str, at: datetime) -> list[Vehicle]:
+def _regulars_filter(at: datetime):
     """Pass holders and vehicles with a non-zero balance: people we must recognise."""
     pass_vids = select(Pass.vehicle_id).where(Pass.status == "ACTIVE", Pass.ends_at > at - timedelta(days=7))
-    return list(db.scalars(select(Vehicle).where(
-        Vehicle.vehicle_class == vehicle_class,
-        (Vehicle.id.in_(pass_vids)) | (Vehicle.balance_paise != 0),
-    )).all())
+    return (Vehicle.id.in_(pass_vids)) | (Vehicle.balance_paise != 0)
 
 
 def approx_open_sessions(db: Session, read: str, vehicle_class: str, before: datetime,
                          tolerance: int) -> list[Candidate]:
-    rows = db.execute(select(ParkingSession, Vehicle).join(Vehicle, ParkingSession.vehicle_id == Vehicle.id).where(
+    rows = db.execute(select(ParkingSession.id, Vehicle.id, Vehicle.plate, ParkingSession.entry_at)
+                      .join(Vehicle, ParkingSession.vehicle_id == Vehicle.id).where(
         ParkingSession.status.in_(SessionStatus.ACTIVE),
         ParkingSession.vehicle_class == vehicle_class,
         ParkingSession.entry_at <= before,
+        func.length(Vehicle.plate).between(len(read) - tolerance, len(read) + tolerance),
     )).all()
     ca = plates.canonical(read)
-    out = []
-    for sess, veh in rows:
-        if abs(len(veh.plate) - len(read)) > tolerance:
-            continue
-        d = plates.levenshtein(ca, plates.canonical(veh.plate), tolerance)
+    hits = []
+    for sid, vid, plate, entry_at in rows:
+        d = plates.levenshtein(ca, plates.canonical(plate), tolerance)
         if d <= tolerance:
-            out.append(Candidate(veh, d, sess, "open_session"))
-    out.sort(key=lambda c: (c.distance, -(c.session.entry_at.timestamp() if c.session else 0)))
-    return out
+            hits.append((d, -entry_at.timestamp(), sid, vid))
+    hits.sort()
+    return [Candidate(db.get(Vehicle, vid), d, db.get(ParkingSession, sid), "open_session") for d, _, sid, vid in hits]
 
 
 def approx_regulars(db: Session, read: str, vehicle_class: str, at: datetime, tolerance: int,
-                    exclude: set[int] | None = None) -> list[Candidate]:
+                    exclude: set[int] | None = None, confusion_only: bool = False) -> list[Candidate]:
     ca = plates.canonical(read)
-    out = []
-    for veh in _known_regulars(db, vehicle_class, at):
-        if exclude and veh.id in exclude:
+    base = select(Vehicle.id, Vehicle.plate).where(Vehicle.vehicle_class == vehicle_class, _regulars_filter(at))
+    if confusion_only:
+        rows = db.execute(base.where(Vehicle.plate_canon == ca)).all()
+    else:
+        rows = db.execute(base.where(func.length(Vehicle.plate).between(len(read) - tolerance, len(read) + tolerance))).all()
+    hits = []
+    for vid, plate in rows:
+        if exclude and vid in exclude:
             continue
-        d = plates.levenshtein(ca, plates.canonical(veh.plate), tolerance)
+        d = 0 if confusion_only else plates.levenshtein(ca, plates.canonical(plate), tolerance)
         if d <= tolerance:
-            out.append(Candidate(veh, d, None, "regular"))
-    out.sort(key=lambda c: c.distance)
-    return out
+            hits.append((d, vid))
+    hits.sort()
+    return [Candidate(db.get(Vehicle, vid), d, None, "regular") for d, vid in hits]
 
 
-def trusted_regular_candidates(db: Session, ev: AnprEvent, plate: str, cands: list[Candidate]) -> list[Candidate]:
+def is_doubtful(db: Session, ev: AnprEvent, plate: str) -> bool:
+    return (not plates.is_valid(plate, get_setting(db, "state_codes"))
+            or ev.confidence < float(get_setting(db, "approx_regular_max_confidence")))
+
+
+def regular_match(db: Session, ev: AnprEvent, plate: str, vclass: str, tol: int) -> Optional[Candidate]:
     """For an unknown plate, only trust a real one-character edit to a regular when the read itself
     is doubtful; confusion-only matches (B/8, 0/O...) are always accepted."""
-    doubtful = (not plates.is_valid(plate, get_setting(db, "state_codes"))
-                or ev.confidence < float(get_setting(db, "approx_regular_max_confidence")))
-    return [c for c in cands if c.distance == 0 or doubtful]
+    cands = approx_regulars(db, plate, vclass, ev.ts, tol, confusion_only=not is_doubtful(db, ev, plate))
+    return unique_best(cands)
 
 
 def unique_best(cands: list[Candidate]) -> Optional[Candidate]:
@@ -294,7 +300,7 @@ def handle_entry(db: Session, ev: AnprEvent, plate: str, vclass: str, *, manual_
     match = "MANUAL" if manual_user else "EXACT"
     if vehicle is None and not manual_user:
         # a known regular (pass holder / has balance) misread by a character is still them
-        best = unique_best(trusted_regular_candidates(db, ev, plate, approx_regulars(db, plate, vclass, ev.ts, tol)))
+        best = regular_match(db, ev, plate, vclass, tol)
         if best is not None:
             vehicle = best.vehicle
             match = "APPROX"
@@ -353,7 +359,7 @@ def handle_exit(db: Session, ev: AnprEvent, plate: str, vclass: str, *, manual_u
         sess = open_session_for(db, vehicle.id)
         if sess is not None and sess.entry_at and sess.entry_at > ev.ts:
             sess = None
-    if sess is None and not manual_user:
+    if sess is None:
         cands = [c for c in approx_open_sessions(db, plate, vclass, ev.ts, tol)
                  if vehicle is None or c.vehicle.id != vehicle.id]
         if vehicle is not None:
@@ -361,10 +367,15 @@ def handle_exit(db: Session, ev: AnprEvent, plate: str, vclass: str, *, manual_u
             cands = [c for c in cands if c.distance == 0]
         best = unique_best(cands)
         if best is not None:
-            sess, vehicle, match = best.session, best.vehicle, "APPROX"
+            sess, vehicle = best.session, best.vehicle
+            match = "MANUAL" if manual_user else "APPROX"
             ev.match_distance = best.distance
-            _log_correction(db, ev, plate, vehicle.plate, "APPROX_AUTO", best.distance, session_id=sess.id)
-        elif len(cands) > 1:
+            _log_correction(db, ev, plate, vehicle.plate, "REVIEW" if manual_user else "APPROX_AUTO", best.distance,
+                            session_id=sess.id, user_id=manual_user)
+            if manual_user or _exit_read_is_truth(db, ev, plate, sess):
+                vehicle = rehome_session(db, sess, plate, user_id=manual_user,
+                                         reason=f"entry misread {vehicle.plate}; exit read {plate}")
+        elif len(cands) > 1 and not manual_user:
             ev.status = EventStatus.REVIEW
             ev.review_reason = "AMBIGUOUS"
             ev.candidates = list(ev.candidates or []) + [
@@ -377,7 +388,7 @@ def handle_exit(db: Session, ev: AnprEvent, plate: str, vclass: str, *, manual_u
             return ProcessResult(ev, exit_display=disp)
 
     if sess is None and vehicle is None and not manual_user:
-        best = unique_best(trusted_regular_candidates(db, ev, plate, approx_regulars(db, plate, vclass, ev.ts, tol)))
+        best = regular_match(db, ev, plate, vclass, tol)
         if best is not None:
             vehicle, match = best.vehicle, "APPROX"
             ev.match_distance = best.distance
@@ -597,3 +608,82 @@ def resolve_orphan(db: Session, session_id: int, *, user_id: int, action: str, a
         raise ValueError("action must be CHARGE or WAIVE")
     db.flush()
     return sess
+
+
+def correct_session_plate(db: Session, session_id: int, plate: str, *, user_id: int) -> ParkingSession:
+    """Worker says the ANPR read is wrong: move an unpaid open session to the right vehicle.
+    The correction is logged (ANPR accuracy data) and the entry event is flagged for review."""
+    s = db.get(ParkingSession, session_id)
+    if s is None or s.status not in (SessionStatus.OPEN, SessionStatus.PREPAID, SessionStatus.PASS):
+        raise ValueError("only open sessions can be corrected")
+    norm = plates.normalise(plate)
+    corr = plates.correct(norm, get_setting(db, "state_codes"))
+    norm = corr.plate if corr.valid else norm
+    if not norm or len(norm) < 6:
+        raise ValueError("enter the full plate")
+    old = db.get(Vehicle, s.vehicle_id)
+    if old.plate == norm:
+        return s
+    if db.scalar(select(func.count(Payment.id)).where(Payment.session_id == s.id)):
+        raise ValueError("session already has a payment; ask a supervisor")
+    target = get_or_create_vehicle(db, norm, s.vehicle_class, s.entry_at)
+    if open_session_for(db, target.id) is not None:
+        raise ValueError(f"{target.display_plate} already has an open session; ask a supervisor")
+    ev = db.get(AnprEvent, s.entry_event_id) if s.entry_event_id else None
+    db.add(PlateCorrection(event_id=ev.id if ev else None, session_id=s.id, camera_ids=ev.camera_ids if ev else [],
+                           raw_plate=old.plate, chosen_plate=norm, source="WORKER", user_id=user_id))
+    s.vehicle_id = target.id
+    p = active_pass(db, target.id, s.entry_at)
+    if p is not None:
+        s.status, s.pass_id, s.tariff_id = SessionStatus.PASS, p.id, None
+    elif s.status == SessionStatus.PASS:
+        s.status, s.pass_id = SessionStatus.OPEN, None
+        s.tariff_id = get_tariff(db, s.vehicle_class, s.entry_at).id
+    if ev is not None:
+        ev.review_reason = "WORKER_CORRECTED"
+        ev.matched_plate = norm
+        ev.vehicle_id = target.id
+    target.last_seen = max(target.last_seen, s.entry_at)
+    db.flush()
+    return s
+
+
+def _exit_read_is_truth(db: Session, ev: AnprEvent, plate: str, sess: ParkingSession) -> bool:
+    """The exit read is more trustworthy than the entry read that created a one-off vehicle."""
+    if find_vehicle(db, plate) is not None or not plates.is_valid(plate, get_setting(db, "state_codes")):
+        return False
+    if ev.confidence < float(get_setting(db, "approx_regular_max_confidence")):
+        return False
+    entry = db.get(AnprEvent, sess.entry_event_id) if sess.entry_event_id else None
+    if entry is None or entry.match_type != "EXACT" or entry.confidence >= ev.confidence:
+        return False
+    ghost = db.get(Vehicle, sess.vehicle_id)
+    born_here = ghost.first_seen >= (sess.entry_at or ghost.first_seen) - timedelta(minutes=1)
+    others = db.scalar(select(func.count(ParkingSession.id)).where(ParkingSession.vehicle_id == ghost.id,
+                                                                   ParkingSession.id != sess.id)) or 0
+    return born_here and others == 0 and sess.pass_id is None
+
+
+def rehome_session(db: Session, sess: ParkingSession, plate: str, *, user_id: Optional[int], reason: str) -> Vehicle:
+    """Move a session that was opened under a misread plate to the true vehicle. Payments already
+    made for the session follow it as a balanced ADJUSTMENT pair (the ledger stays append-only)."""
+    ghost = db.get(Vehicle, sess.vehicle_id)
+    target = get_or_create_vehicle(db, plate, sess.vehicle_class, sess.entry_at or utcnow())
+    if target.id == ghost.id:
+        return target
+    paid = int(db.scalar(select(func.coalesce(func.sum(Payment.amount_paise), 0)).where(
+        Payment.session_id == sess.id, Payment.status == PayStatus.CONFIRMED)) or 0)
+    if paid:
+        note = f"session #{sess.id} moved {ghost.plate} -> {target.plate}: {reason}"
+        ledger.post(db, ghost.id, LedgerKind.ADJUSTMENT, paid, session_id=sess.id, reason=note, user_id=user_id)
+        ledger.post(db, target.id, LedgerKind.ADJUSTMENT, -paid, session_id=sess.id, reason=note, user_id=user_id)
+    for pm in db.scalars(select(Payment).where(Payment.session_id == sess.id)).all():
+        pm.status_note = ((pm.status_note or "") + f" [session re-homed to {target.plate}]").strip()
+    sess.vehicle_id = target.id
+    if sess.entry_at:
+        target.first_seen = min(target.first_seen, sess.entry_at)
+    p = active_pass(db, target.id, sess.entry_at or utcnow())
+    if p is not None and sess.status in (SessionStatus.OPEN, SessionStatus.PREPAID):
+        sess.status, sess.pass_id = SessionStatus.PASS, p.id
+    db.flush()
+    return target

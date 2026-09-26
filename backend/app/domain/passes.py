@@ -47,13 +47,21 @@ def activate_pass(db: Session, p: Pass, payment: Payment) -> Pass:
     p.payment_id = payment.id
     ledger.post(db, p.vehicle_id, LedgerKind.PASS_SALE, p.amount_paise, pass_id=p.id, payment_id=payment.id,
                 user_id=payment.collected_by)
-    # vehicle currently inside without paying (entered today): its stay is now covered by the pass
+    # stays inside the pass window are covered: open ones become PASS sessions; stays already closed
+    # (e.g. the pass was an offline UPI claim confirmed after the bike left) get their charge reversed
     for s in db.scalars(select(ParkingSession).where(ParkingSession.vehicle_id == p.vehicle_id,
-                                                     ParkingSession.status == SessionStatus.OPEN,
+                                                     ParkingSession.pass_id.is_(None),
                                                      ParkingSession.entry_at >= p.starts_at,
                                                      ParkingSession.entry_at < p.ends_at)).all():
-        s.status = SessionStatus.PASS
-        s.pass_id = p.id
+        if s.status in (SessionStatus.OPEN, SessionStatus.PREPAID):
+            s.status = SessionStatus.PASS
+            s.pass_id = p.id
+        elif s.status in (SessionStatus.CLOSED, SessionStatus.SETTLED) and (s.charge_paise or 0) > 0:
+            ledger.post(db, p.vehicle_id, LedgerKind.ADJUSTMENT, -s.charge_paise, session_id=s.id, pass_id=p.id,
+                        reason=f"stay covered by pass #{p.id} (valid from {p.starts_at.date()})",
+                        user_id=payment.collected_by)
+            s.pass_id = p.id
+            s.status = SessionStatus.SETTLED if db.get(Vehicle, p.vehicle_id).balance_paise <= 0 else s.status
     db.flush()
     events.emit(db, "pass.activated", {"pass_id": p.id, "vehicle_id": p.vehicle_id,
                                        "ends_at": p.ends_at.isoformat()})

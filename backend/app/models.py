@@ -217,6 +217,7 @@ class Vehicle(Base):
     __tablename__ = "vehicles"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     plate: Mapped[str] = mapped_column(String(16), unique=True)  # normalised
+    plate_canon: Mapped[str] = mapped_column(String(16), index=True, default="")  # confusion-collapsed
     display_plate: Mapped[str] = mapped_column(String(24))
     vehicle_class: Mapped[str] = mapped_column(ForeignKey("vehicle_classes.code"))
     first_seen: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)

@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t('privacy_title') }}</h1>
+<p class="meta">Digital Personal Data Protection Act, 2023</p>
+<section class="prose">
+<h2>Who we are</h2>
+<p>{{ lot.lot_name }} operates this parking lot and this website. We are the Data Fiduciary for the personal data described below.</p>
+
+<h2>What we collect and why</h2>
+<ul>
+  <li><b>Vehicle number and camera images</b> at the entry and exit gates (ANPR cameras), to record parking time and charge the correct amount.</li>
+  <li><b>Mobile number</b> (only if you give it), to send one-time passwords, digital receipts, balance updates and pass reminders.</li>
+  <li><b>Payment details</b> (amount, UPI reference, time), to keep accounts and resolve disputes. We never see or store your UPI PIN or bank details.</li>
+  <li>On this website: the pages you use and your device's network address, only for security (for example, to stop repeated OTP requests).</li>
+</ul>
+
+<h2>How long we keep it</h2>
+<ul>
+  <li>Plate close-up images: 90 days. Full camera frames: 30 days.</li>
+  <li>Parking, payment and receipt records: as long as accounting and tax law requires.</li>
+  <li>OTP codes are stored only as one-way hashes and expire in 5 minutes. Mobile numbers attached to payments on this website are deleted from it after 30 days (the parking system keeps them with your vehicle record until you ask us to delete them).</li>
+</ul>
+
+<h2>Who can see it</h2>
+<p>Only authorised parking staff, according to their role. Public pages show vehicle numbers only partly (for example MH12••••34) and blurred thumbnails. We share data with our payment gateway and SMS provider only to process payments and send messages, and with authorities only when the law requires it. We do not sell your data.</p>
+
+<h2>Your rights</h2>
+<p>You can ask for a summary of your data, correction, deletion (records we must keep by law are retained), or withdraw consent for SMS. You can also nominate another person to exercise these rights. Use the form below after verifying your mobile number, or contact us.</p>
+<p><a class="button primary" href="/privacy/request">{{ t('data_request') }}</a></p>
+
+<h2>Grievances</h2>
+<p>{{ contact }}. We reply within 30 days. If you are not satisfied, you may complain to the Data Protection Board of India.</p>
+</section>
+{% endblock %}

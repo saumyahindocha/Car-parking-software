@@ -1,0 +1,27 @@
+[Unit]
+Description=Parking exit alert unit (display + tower light)
+Wants=network-online.target time-sync.target
+After=network-online.target time-sync.target
+
+[Service]
+Type=simple
+User=alertunit
+Group=alertunit
+SupplementaryGroups=gpio video render input
+WorkingDirectory=/opt/alert-unit
+Environment=PYTHONUNBUFFERED=1
+Environment=PYGAME_HIDE_SUPPORT_PROMPT=1
+# Console kiosk (Raspberry Pi OS Lite): draw straight to the HDMI output through KMS/DRM
+Environment=SDL_VIDEODRIVER=kmsdrm
+Environment=SDL_AUDIODRIVER=dummy
+EnvironmentFile=-/etc/alert-unit/env
+ExecStart=/opt/alert-unit/venv/bin/python -m exit_alert -c /etc/alert-unit/config.yaml
+Restart=always
+RestartSec=2
+# the unit turns the light green and releases the relays on SIGTERM
+KillSignal=SIGTERM
+TimeoutStopSec=5
+Nice=-5
+
+[Install]
+WantedBy=multi-user.target

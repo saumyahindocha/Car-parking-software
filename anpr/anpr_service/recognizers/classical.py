@@ -17,6 +17,7 @@ diagnostic fallback: use ``LocalOnnxRecognizer`` or ``CommercialApiRecognizer``.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 
 import cv2
 import numpy as np
@@ -24,10 +25,19 @@ import numpy as np
 from ..config import ClassicalConfig
 from ..rows import binarize_ink, detect_rows, suppress_borders, to_gray
 from ..types import Box, OcrResult, PlateObservation, VehicleClass, VehicleObservation
-from .base import PlateRecognizer, associate_plates
+from .base import PlateRecognizer, associate_plates, plate_plausible
 from .glyphs import classify
 
 log = logging.getLogger(__name__)
+
+
+@dataclass
+class _Glyph:
+    """Horizontal extent of one character (possibly several connected components)."""
+
+    x0: int
+    x1: int
+    labels: list[int]
 
 
 class ClassicalRecognizer(PlateRecognizer):
@@ -77,18 +87,34 @@ class ClassicalRecognizer(PlateRecognizer):
             blob_small = (bx, by, bx + bw, by + bh)
             blob = (bx * inv, by * inv, min(w, (bx + bw) * inv), min(h, (by + bh) * inv))
             plates = self.find_plates(frame, blob)
-            if len(plates) >= 2:
-                out.extend(self._split_blob(fg, blob_small, inv, plates, (w, h)))
+            own = [p for p in plates if plate_plausible(blob, p.box)]
+            # Plates too high for this blob belong to farther vehicles merged into it.
+            for p in plates:
+                if p not in own:
+                    out.append(self._vehicle_from_plate(p, (w, h)))
+            if len(own) >= 2:
+                out.extend(self._split_blob(fg, blob_small, inv, own, (w, h)))
             else:
                 out.append(
                     VehicleObservation(
                         box=blob,
                         vehicle_class=self._classify(blob, (w, h)),
                         score=0.5,
-                        plate=plates[0] if plates else None,
+                        plate=own[0] if own else None,
                     )
                 )
         return out
+
+    @staticmethod
+    def _vehicle_from_plate(plate: PlateObservation, size: tuple[int, int]) -> VehicleObservation:
+        """Approximate box of a two-wheeler from its rear plate (used when it is
+        merged into a nearer vehicle's blob)."""
+        x1, y1, x2, y2 = plate.box
+        pw = x2 - x1
+        cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
+        bottom = min(float(size[1]), cy + 1.5 * pw)
+        box = (max(0.0, cx - 1.2 * pw), max(0.0, bottom - 5.0 * pw), min(float(size[0]), cx + 1.2 * pw), bottom)
+        return VehicleObservation(box=box, vehicle_class=VehicleClass.BIKE, score=0.3, plate=plate)
 
     def _blobs(self, contours: list[np.ndarray], shape: tuple[int, ...]) -> list[tuple[int, int, int, int]]:
         """Foreground blobs as (x, y, w, h), with fragments of one vehicle re-joined.
@@ -262,25 +288,22 @@ class ClassicalRecognizer(PlateRecognizer):
         comps = [c for c in comps if c[3] >= 0.6 * tallest]
         comps.sort(key=lambda c: c[0])
         # Merge fragments that overlap horizontally (broken strokes).
-        groups: list[dict[str, object]] = []
-        for c in comps:
+        groups: list[_Glyph] = []
+        for x, _y, cw, _ch, label in comps:
             if groups:
                 g = groups[-1]
-                gx0, gx1 = g["x0"], g["x1"]  # type: ignore[misc]
-                overlap = min(gx1, c[0] + c[2]) - max(gx0, c[0])  # type: ignore[operator]
-                if overlap > 0.5 * min(c[2], gx1 - gx0):  # type: ignore[operator]
-                    g["x0"] = min(gx0, c[0])  # type: ignore[type-var]
-                    g["x1"] = max(gx1, c[0] + c[2])  # type: ignore[type-var]
-                    g["labels"].append(c[4])  # type: ignore[attr-defined]
+                overlap = min(g.x1, x + cw) - max(g.x0, x)
+                if overlap > 0.5 * min(cw, g.x1 - g.x0):
+                    g.x0, g.x1 = min(g.x0, x), max(g.x1, x + cw)
+                    g.labels.append(label)
                     continue
-            groups.append({"x0": c[0], "x1": c[0] + c[2], "labels": [c[4]]})
-        widths = [int(g["x1"]) - int(g["x0"]) for g in groups]  # type: ignore[call-overload]
-        normal = [wd for wd in widths if wd <= 1.0 * tallest]
+            groups.append(_Glyph(x, x + cw, [label]))
+        normal = [g.x1 - g.x0 for g in groups if g.x1 - g.x0 <= tallest]
         char_w = float(np.median(normal)) if normal else 0.65 * tallest
         glyphs: list[np.ndarray] = []
         for g in groups:
-            x0, x1 = int(g["x0"]), int(g["x1"])  # type: ignore[call-overload]
-            mask = np.isin(labels[:, x0:x1], g["labels"]).astype(np.uint8)  # type: ignore[arg-type]
+            x0, x1 = g.x0, g.x1
+            mask = np.isin(labels[:, x0:x1], g.labels).astype(np.uint8)
             ys = np.nonzero(mask.any(axis=1))[0]
             if len(ys) == 0:
                 continue

@@ -197,24 +197,37 @@ def _averages(rows: list[dict]) -> dict:
 
 
 def _flag_outliers(rows: list[dict]) -> None:
+    """Automatic outlier flags for the worker comparison report.
+
+    Unpaid-in-zone is tested against the pooled rate of the *other* shifts (binomial z-score), so
+    small shifts are not flagged on noise. The spec's example rule (unpaid above average combined
+    with below-average cash) is applied on top of a z-score > 1. Disputes are the strongest signal.
+    """
     act = [r for r in rows if r["zone_sessions"] >= 20]
-    if len(act) >= 2:
-        rates = [r["unpaid_rate"] for r in act]
-        shares = [r["cash_share"] for r in act]
-        mu_r, mu_s = statistics.mean(rates), statistics.mean(shares)
-        sd_r = statistics.pstdev(rates) or 0.0
-        for r in act:
-            others = [x["unpaid_rate"] for x in act if x is not r]
-            peer = statistics.mean(others) if others else mu_r
-            if r["unpaid_rate"] > peer * 1.25 and r["unpaid_rate"] - peer > 0.02:
-                r["flags"].append("HIGH_UNPAID_IN_ZONE")
-                if r["cash_share"] < mu_s:
-                    r["flags"].append("HIGH_UNPAID_LOW_CASH")
-            if sd_r and (r["unpaid_rate"] - mu_r) / sd_r > 1.5:
-                r["flags"].append("UNPAID_OUTLIER")
+    avg_share = statistics.mean(r["cash_share"] for r in act) if act else 0.0
+    avg_unpaid = statistics.mean(r["unpaid_rate"] for r in act) if act else 0.0
+    for r in act:
+        others = [x for x in act if x is not r]
+        n_o = sum(x["zone_sessions"] for x in others)
+        if not n_o:
+            continue
+        p = sum(x["unpaid_in_zone"] for x in others) / n_o
+        n = r["zone_sessions"]
+        sd = (n * p * (1 - p)) ** 0.5 or 1.0
+        z = (r["unpaid_in_zone"] - n * p) / sd
+        r["unpaid_z"] = round(z, 2)
+        if z > 2.0 and r["unpaid_in_zone"] - n * p >= 3:
+            r["flags"].append("HIGH_UNPAID_IN_ZONE")
+        if z > 1.0 and r["unpaid_rate"] > avg_unpaid and r["cash_share"] < avg_share:
+            r["flags"].append("HIGH_UNPAID_LOW_CASH")
+        if avg_share and r["cash_count"] >= 10 and r["cash_share"] < 0.6 * avg_share:
+            r["flags"].append("LOW_CASH_SHARE")
     for r in rows:
-        if r["disputes_upheld"] + r["disputes_unresolved"] >= 3:
+        repeated = r["disputes_upheld"] + r["disputes_unresolved"] >= 3
+        if repeated:
             r["flags"].append("REPEATED_DISPUTES")
+            if r["unpaid_rate"] > avg_unpaid:
+                r["flags"].append("SUSPECT_UNRECORDED_CASH")
         if r["handover_variance_paise"] < 0 or r["shift_variance_paise"] < 0:
             r["flags"].append("CASH_SHORT")
         if r["limit_breaches"]:

@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="ok-title">{{ t('success') }}</h1>
+<div class="card" id="done" {% if not receipt %}data-status-url="/pay/i/{{ intent.token }}/status"{% endif %}>
+  <table class="kv">
+    <tr><th>{{ t('vehicle') }}</th><td class="plate">{{ plate_shown }}</td></tr>
+    <tr><th>{{ t('amount') }}</th><td><b>{{ rupees(intent.amount_paise) }}</b></td></tr>
+    {% if intent.duration_minutes %}<tr><th>{{ t('duration') }}</th><td>{{ dur(intent.duration_minutes) }}</td></tr>{% endif %}
+    {% if intent.dues_paise %}<tr><th>{{ t('prev_dues') }}</th><td>{{ rupees(intent.dues_paise) }}</td></tr>{% endif %}
+    {% if pass_type %}<tr><th>{{ t('pass_valid') }}</th><td>{{ pass_type.name }}</td></tr>{% endif %}
+    {% if intent.utr %}<tr><th>{{ t('upi_ref') }}</th><td>{{ intent.utr }}</td></tr>{% endif %}
+    <tr><th>{{ t('txn_ref') }}</th><td>{{ intent.txn_ref }}</td></tr>
+    <tr><th>{{ t('paid_at') }}</th><td>{{ localtime(intent.paid_at) }}</td></tr>
+  </table>
+</div>
+{% if intent.kind == 'PASS' %}<p class="ok">{{ t('pass_activates') }}</p>{% endif %}
+{% if receipt %}
+<a class="button primary" href="/r/{{ receipt.code }}">{{ t('receipt_ready') }}</a>
+{% else %}
+<p class="meta receipt-wait" role="status" aria-live="polite">{{ t('receipt_pending') }}</p>
+<a class="button receipt-link" href="/pay/i/{{ intent.token }}">{{ t('receipt_ready') }}</a>
+{% endif %}
+<p class="notice">{{ lot.receipt_footer }}</p>
+{% endblock %}

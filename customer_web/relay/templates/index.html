@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t('tagline') }}</h1>
+<ul class="tiles">
+  <li><a class="tile tile-pay" href="/pay"><strong>{{ t('home_pay') }}</strong><span>{{ t('home_pay_sub') }}</span></a></li>
+  <li><a class="tile" href="/dues"><strong>{{ t('home_dues') }}</strong><span>{{ t('home_dues_sub') }}</span></a></li>
+  <li><a class="tile" href="/pass"><strong>{{ t('home_pass') }}</strong><span>{{ t('home_pass_sub') }}</span></a></li>
+</ul>
+<p class="notice">{{ t('home_receipt_note') }}</p>
+{% endblock %}

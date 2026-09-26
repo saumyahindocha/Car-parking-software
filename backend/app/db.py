@@ -32,8 +32,19 @@ class UTCDateTime(TypeDecorator):
         return value.replace(tzinfo=timezone.utc)
 
 
+_clock_override = None
+
+
 def utcnow() -> datetime:
+    """Current UTC time. The simulator and tests may install a virtual clock via set_clock()."""
+    if _clock_override is not None:
+        return _clock_override()
     return datetime.now(timezone.utc)
+
+
+def set_clock(fn) -> None:
+    global _clock_override
+    _clock_override = fn
 
 
 class Base(DeclarativeBase):

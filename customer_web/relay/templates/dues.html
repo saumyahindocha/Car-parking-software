@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t('dues_title') }}</h1>
+<p class="plate big">{{ plate_shown }}</p>
+{% if access == 'unknown' %}
+<p>{{ t('unknown_vehicle') }}</p>
+{% elif access == 'mismatch' %}
+<p class="warn" role="alert">{{ t('phone_mismatch') }}</p>
+{% else %}
+<div class="card">
+  {% set bal = vehicle.balance_paise - pending %}
+  <p class="meta">{{ t('balance') }}</p>
+  {% if bal > 0 %}<p class="amount due">{{ t('dues') }} {{ rupees(bal) }}</p>
+  {% elif bal < 0 %}<p class="amount credit">{{ t('credit') }} {{ rupees(-bal) }}</p>
+  {% else %}<p class="amount">{{ rupees(0) }}</p><p>{{ t('no_dues') }}</p>{% endif %}
+  {% if pending > 0 %}<p class="meta">{{ t('pending_update', amount=rupees(pending)) }}</p>{% endif %}
+</div>
+{% if access == 'nophone' %}<p class="meta">{{ t('phone_linked_after') }}</p>{% endif %}
+{% if due > 0 %}
+<form method="post" action="/dues/pay">
+  <input type="hidden" name="{{ csrf_field }}" value="{{ csrf }}">
+  <button type="submit" class="primary">{{ t('pay_dues', amount=rupees(due)) }}</button>
+</form>
+{% endif %}
+{% if vehicle.pass_ %}<p class="ok">{{ t('current_pass', date=vehicle.pass_.ends_on) }}</p>{% endif %}
+{% if history %}
+<h2>{{ t('history') }}</h2>
+<table class="history">
+  <thead><tr><th>{{ t('entry') }}</th><th>{{ t('exit') }}</th><th>{{ t('charge') }}</th></tr></thead>
+  <tbody>
+  {% for h in history %}
+  <tr><td>{{ localtime(h.entry_at, '%d %b %I:%M %p') }}</td><td>{{ localtime(h.exit_at, '%d %b %I:%M %p') }}</td>
+      <td>{% if h.charge_paise is not none %}{{ rupees(h.charge_paise) }}{% else %}—{% endif %}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+<p><a class="button" href="/dues/dispute">{{ t('dispute_link') }}</a></p>
+{% endif %}
+{% endblock %}

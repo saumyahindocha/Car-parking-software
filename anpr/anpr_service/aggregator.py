@@ -14,7 +14,7 @@ Both ANPR cameras of a gate overlap, so one vehicle can produce a
   frames up to ``first crossing + merge_hold_s`` (event-time watermarks), or
   as soon as all ANPR cameras have contributed.  Watermarks make merging
   correct in real time *and* in as-fast-as-possible replay, and keep latency
-  at roughly ``merge_hold_s`` (0.8 s default) after the crossing.
+  at roughly ``merge_hold_s`` (0.5 s default) after the crossing.
 * After emission: a later read of the same plate within ``merge_window_s``
   is folded into the emitted event (suppressed); within ``dedupe_window_s``
   it is dropped as a duplicate.
@@ -28,7 +28,7 @@ from __future__ import annotations
 import logging
 import time
 import uuid
-from collections import deque
+from collections import Counter, deque
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -151,6 +151,9 @@ class GateAggregator:
 
     # ---------------------------------------------------------------- input
     def watermark(self, camera_id: str, ts_ms: int) -> None:
+        if camera_id in self._eos:  # a restarted worker is streaming again
+            self._eos.discard(camera_id)
+            self._watermarks[camera_id] = ts_ms
         if ts_ms > self._watermarks.get(camera_id, -1):
             self._watermarks[camera_id] = ts_ms
         self._last_seen[camera_id] = self.clock()
@@ -208,19 +211,19 @@ class GateAggregator:
                     self._join(c, read, cross_camera=True)
                     return
             # 3) Pending UNREAD-only cluster of the same crossing from another camera.
-            c = self._closest_unread_partner(read, only_unread_clusters=True, window_ms=unread_ms)
-            if c is not None:
+            partner = self._closest_unread_partner(read, only_unread_clusters=True, window_ms=unread_ms)
+            if partner is not None:
                 self.stats.merged_unread += 1
-                self._join(c, read, cross_camera=True)
+                self._join(partner, read, cross_camera=True)
                 return
             self._new_cluster(read)
             return
 
         # UNREAD
-        c = self._closest_unread_partner(read, only_unread_clusters=False, window_ms=unread_ms)
-        if c is not None:
+        partner = self._closest_unread_partner(read, only_unread_clusters=False, window_ms=unread_ms)
+        if partner is not None:
             self.stats.merged_unread += 1
-            self._join(c, read, cross_camera=True)
+            self._join(partner, read, cross_camera=True)
             return
         for e in reversed(self._emitted):
             if (
@@ -324,10 +327,12 @@ class GateAggregator:
                     return None
         direction, wrong_way = resolve_direction(self.gate.direction, primary.travel_sign)
         candidates = self._merge_candidates(c.reads)
-        classes = [r.vehicle_class for r in c.reads]
-        vclass = primary.vehicle_class if primary.vehicle_class != VehicleClass.OTHER else max(
-            set(classes), key=classes.count
-        )
+        vclass = primary.vehicle_class
+        if vclass == VehicleClass.OTHER:
+            # Another camera may have classified the vehicle better.
+            classes = Counter(r.vehicle_class for r in c.reads if r.vehicle_class != VehicleClass.OTHER)
+            if classes:
+                vclass = classes.most_common(1)[0][0]
         event = MergedEvent(
             event_id=str(uuid.uuid4()),
             gate_id=self.gate.id,

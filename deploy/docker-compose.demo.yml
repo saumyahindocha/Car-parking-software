@@ -1,0 +1,15 @@
+# Laptop demo: no GPU, no cameras. Replays synthetic video through the classical recogniser,
+# mock payment gateway, demo endpoints on.   docker compose -f docker-compose.yml -f docker-compose.demo.yml up
+services:
+  backend:
+    environment:
+      PARK_DEMO_MODE: "true"
+      PARK_GATEWAY: mock
+  anpr:
+    build:
+      context: ../anpr
+      args:
+        BASE_IMAGE: ubuntu:24.04
+        ONNX_PACKAGE: onnxruntime
+    deploy: !reset {}
+    command: ["replay", "--config", "/config/site.yaml", "--loop"]

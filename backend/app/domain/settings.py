@@ -53,11 +53,18 @@ DEFAULTS: dict[str, Any] = {
 }
 
 
+_MISSING = object()
+
+
 def get_setting(db: Session, key: str) -> Any:
-    row = db.get(Setting, key)
-    if row is not None:
-        return row.value
-    return DEFAULTS.get(key)
+    """Value of a setting (DB override or default). Cached per DB session (one request / job run)."""
+    cache = db.info.setdefault("_settings_cache", {})
+    val = cache.get(key, _MISSING)
+    if val is _MISSING:
+        row = db.get(Setting, key)
+        val = row.value if row is not None else DEFAULTS.get(key)
+        cache[key] = val
+    return val
 
 
 def all_settings(db: Session) -> dict[str, Any]:
@@ -76,3 +83,4 @@ def set_setting(db: Session, key: str, value: Any) -> None:
     else:
         row.value = value
     db.flush()
+    db.info.setdefault("_settings_cache", {})[key] = value

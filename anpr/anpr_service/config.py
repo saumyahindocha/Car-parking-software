@@ -23,6 +23,16 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from .plates import DEFAULT_STATE_CODES, PlateRules
 from .types import CameraRole, CameraSide, GateDirection
 
+_CRED_RE = re.compile(r"(?P<scheme>[a-z][a-z0-9+.-]*://)(?P<user>[^:@/\s]+):(?P<pw>[^@/\s]+)@", re.I)
+
+
+def redact_url(url: str | None) -> str:
+    """Hide the password in ``rtsp://user:pass@host/...`` for logs and CLI output."""
+    if not url:
+        return ""
+    return _CRED_RE.sub(lambda m: f"{m.group('scheme')}{m.group('user')}:***@", url)
+
+
 _ENV_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
 
 
@@ -77,7 +87,7 @@ class Settings(_Model):
     merge_window_s: float = 10.0
     dedupe_window_s: float = 60.0
     min_confidence: float = 0.6
-    merge_hold_s: float = 0.8  # wait this long (event time) for the other camera of a crossing
+    merge_hold_s: float = 0.5  # wait this long (event time) for the other camera of a crossing
     unread_merge_s: float = 1.5
     unread_merge_dx: float = 0.15  # lateral distance (fraction of gate width) for UNREAD merging
     heartbeat_s: float = 10.0

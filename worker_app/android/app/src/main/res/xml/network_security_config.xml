@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The edge server runs on the lot LAN over plain HTTP (default http://192.168.10.2:8000).
+     Cleartext is allowed so the app can reach it; any HTTPS endpoint still uses system CAs. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system"/>
+        </trust-anchors>
+    </base-config>
+</network-security-config>

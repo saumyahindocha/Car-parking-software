@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{{ t('receipt') }} {{ r.number }}{% endblock %}
+{% block content %}
+<article class="receipt" aria-label="{{ t('receipt') }}">
+  <h1>{{ d.lot_name or lot.lot_name }}</h1>
+  {% if d.lot_address %}<p class="meta">{{ d.lot_address }}</p>{% endif %}
+  <table class="kv">
+    <tr><th>{{ t('receipt_no') }}</th><td>{{ r.number }}</td></tr>
+    <tr><th>{{ t('vehicle') }}</th><td class="plate">{{ d.plate }}</td></tr>
+    <tr><th>{{ t('vehicle_class') }}</th><td>{{ t((d.vehicle_class or '') | lower) }}</td></tr>
+    {% if d.entry_time %}<tr><th>{{ t('entry_time') }}</th><td>{{ localtime(d.entry_time) }}</td></tr>{% endif %}
+    {% if d.duration_paid_minutes %}<tr><th>{{ t('duration') }}</th><td>{{ dur(d.duration_paid_minutes) }}</td></tr>{% endif %}
+    {% if d.pass %}<tr><th>{{ t('pass_valid') }}</th><td>{{ d.pass.type }}: {{ d.pass.valid_from }} – {{ d.pass.valid_till }}</td></tr>{% endif %}
+    <tr><th>{{ t('amount') }}</th><td><b>{{ rupees(d.amount_paise) }}</b></td></tr>
+    {% if d.dues_cleared_paise %}<tr><th>{{ t('prev_dues') }}</th><td>{{ rupees(d.dues_cleared_paise) }}</td></tr>{% endif %}
+    <tr><th>{{ t('mode_paid') }}</th><td>{{ d.mode }}</td></tr>
+    {% if d.upi_ref %}<tr><th>{{ t('upi_ref') }}</th><td>{{ d.upi_ref }}</td></tr>{% endif %}
+    <tr><th>{{ t('paid_at') }}</th><td>{{ localtime(d.paid_at) }}</td></tr>
+    {% if d.gstin %}<tr><th>{{ t('gstin') }}</th><td>{{ d.gstin }}</td></tr>{% endif %}
+    {% if d.gst_paise %}
+    <tr><th>{{ t('taxable') }}</th><td>{{ rupees(d.taxable_paise) }}</td></tr>
+    <tr><th>{{ t('gst') }} ({{ d.gst_rate_percent }}%)</th><td>{{ rupees(d.gst_paise) }}</td></tr>
+    {% endif %}
+  </table>
+  <p class="notice">{{ d.footer or lot.receipt_footer }}</p>
+</article>
+{% endblock %}

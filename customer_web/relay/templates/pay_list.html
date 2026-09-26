@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t('pay_title') }}</h1>
+{% include "_search.html" %}
+{% if search_error %}<p class="error" role="alert">Please enter a valid vehicle number.</p>{% endif %}
+{% if stale %}<p class="warn" role="status">{{ t('stale') }}</p>{% endif %}
+{% if not search_error %}
+<h2>{{ t('or_pick', hours=hours) }}</h2>
+{% if entries %}
+<ul class="vehicles">
+{% for e in entries %}
+  <li>
+    {% if e.session_id in paid %}
+    <div class="veh veh-paid">
+    {% else %}
+    <a class="veh" href="/pay/s/{{ e.session_id }}">
+    {% endif %}
+      {% if e.thumb_b64 %}<img src="/t/{{ e.session_id }}.jpg" alt="" width="120" height="60" loading="lazy">{% else %}<span class="nothumb" aria-hidden="true"></span>{% endif %}
+      <span class="plate masked">{{ e.masked_plate }}</span>
+      <span class="meta">{{ t('entered') }} {{ localtime(e.entry_at, '%I:%M %p') }}{% if e.session_id in paid %} · <b>{{ t('paid') }}</b>{% endif %}</span>
+    {% if e.session_id in paid %}</div>{% else %}</a>{% endif %}
+  </li>
+{% endfor %}
+</ul>
+{% else %}
+<p>{{ t('no_recent') }}</p>
+{% endif %}
+{% endif %}
+{% endblock %}

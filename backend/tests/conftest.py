@@ -19,9 +19,16 @@ from app.db import Base, SessionLocal, set_engine  # noqa: E402
 from app.seed import seed_reference, seed_users  # noqa: E402
 
 
+TEST_DB = os.environ.get("TEST_DATABASE_URL")  # e.g. postgresql+psycopg://parking:parking@localhost/parking_test
+
+
 @pytest.fixture()
 def engine():
-    eng = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    if TEST_DB:
+        eng = create_engine(TEST_DB)
+        Base.metadata.drop_all(eng)
+    else:
+        eng = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Base.metadata.create_all(eng)
     set_engine(eng)
     db = SessionLocal()
