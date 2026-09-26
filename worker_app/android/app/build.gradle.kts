@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "`in`.stationparking.parking_worker"
+    namespace = "com.stationparking.parking_worker"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -15,7 +15,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "`in`.stationparking.parking_worker"
+        applicationId = "com.stationparking.parking_worker"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         // Android 12+ only (fleet phones are Android 12 or newer).
