@@ -525,13 +525,14 @@ def reconcile_upi(db: Session, lines: list[SettlementLine], day: Optional[str] =
     for ln in lines:
         if ln.txn_ref:
             by_ref.setdefault(ln.txn_ref, []).append(ln)
-    confirmed, amount_mismatch, unknown = [], [], []
+    confirmed, amount_mismatch, unknown, awaiting = [], [], [], []
     for ref, lns in by_ref.items():
         p = db.scalars(select(Payment).where(Payment.txn_ref == ref)).first()
         total = sum(line.amount_paise for line in lns)
         if p is None:
             parsed = parse_txn_ref(ref)
-            unknown.append({"txn_ref": ref, "amount_paise": total, "parsed": parsed})
+            row = {"txn_ref": ref, "amount_paise": total, "parsed": parsed}
+            (awaiting if (parsed or ref.startswith("PR")) else unknown).append(row)
             continue
         if p.status in (PayStatus.CLAIMED_OFFLINE, PayStatus.INITIATED, PayStatus.FAILED):
             confirm_payment(db, p, gateway_ref=lns[0].gateway_ref, utr=lns[0].utr, amount_paise=total,
@@ -553,7 +554,7 @@ def reconcile_upi(db: Session, lines: list[SettlementLine], day: Optional[str] =
             missing.append({"payment_id": p.id, "txn_ref": p.txn_ref, "amount_paise": p.amount_paise})
     db.flush()
     return {"confirmed_offline": confirmed, "amount_mismatch": amount_mismatch, "unknown_credits": unknown,
-            "missing_from_settlement": missing}
+            "awaiting_relay_sync": awaiting, "missing_from_settlement": missing}
 
 
 def stale_offline_claims(db: Session, now: Optional[datetime] = None) -> list[Payment]:

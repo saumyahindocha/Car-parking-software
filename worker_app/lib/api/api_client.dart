@@ -202,6 +202,11 @@ class ApiClient {
 
   Future<PaymentInfo> payment(int id) async => PaymentInfo(Map<String, dynamic>.from(await get('/api/payments/$id')));
 
+  /// Abandon an unpaid (INITIATED) UPI payment. If it was paid meanwhile the
+  /// server confirms it instead: check the returned status.
+  Future<PaymentInfo> cancelPayment(int id, {String? reason}) async =>
+      PaymentInfo(Map<String, dynamic>.from(await post('/api/payments/$id/cancel', {'reason': ?reason})));
+
   Future<PaymentInfo> claimOffline(int id) async =>
       PaymentInfo(Map<String, dynamic>.from(await post('/api/payments/$id/claim-offline')));
 

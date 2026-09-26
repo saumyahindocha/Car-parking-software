@@ -24,6 +24,29 @@ library;
 /// fixed offset is an exact stand-in for `ZoneInfo("Asia/Kolkata")`.
 const Duration istOffset = Duration(hours: 5, minutes: 30);
 
+/// Fixed UTC offsets for zones without DST that a site could plausibly use.
+/// The backend sends `site_timezone` in `/api/bootstrap`; unknown names fall
+/// back to IST (the only zone this deployment is designed for).
+const Map<String, Duration> _fixedZones = {
+  'Asia/Kolkata': istOffset,
+  'Asia/Calcutta': istOffset,
+  'Asia/Colombo': istOffset,
+  'Asia/Kathmandu': Duration(hours: 5, minutes: 45),
+  'Asia/Dhaka': Duration(hours: 6),
+  'Asia/Karachi': Duration(hours: 5),
+  'Asia/Dubai': Duration(hours: 4),
+  'Asia/Singapore': Duration(hours: 8),
+  'UTC': Duration.zero,
+  'Etc/UTC': Duration.zero,
+  'GMT': Duration.zero,
+};
+
+/// UTC offset for an IANA zone name (fixed-offset zones only); IST if unknown or null.
+Duration tzOffsetFor(String? zone) => _fixedZones[zone] ?? istOffset;
+
+/// Whether [zone] is known to the app (otherwise IST is assumed).
+bool isKnownZone(String? zone) => zone != null && _fixedZones.containsKey(zone);
+
 class Tariff {
   const Tariff({
     this.id,

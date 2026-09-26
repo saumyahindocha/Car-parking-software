@@ -5,6 +5,7 @@ import '../api/api_client.dart';
 import '../api/models.dart';
 import '../domain/pay_request.dart';
 import '../domain/plates.dart' as plates;
+import '../offline/local_store.dart';
 import '../state/app_state.dart';
 import '../state/payment_service.dart';
 import '../tariff/tariff.dart';
@@ -96,6 +97,7 @@ class _CollectFlowScreenState extends State<CollectFlowScreen> {
       durationMinutes: minutes,
       duesPaise: _t.duesPaise,
       creditPaise: _t.creditPaise,
+      tzOffset: _app.siteTzOffset,
     );
     return QuoteInfo(
       basePaise: lq.basePaise,
@@ -182,6 +184,7 @@ class _CollectFlowScreenState extends State<CollectFlowScreen> {
     if (newPlate == null || newPlate == _t.plate || !mounted) return;
     setState(() => _busy = true);
     try {
+      if (!_app.online) throw NetworkException('offline');
       final s = await _app.api.correctPlate(_t.sessionId!, newPlate);
       var t = _t.copyWith(vehicleId: s.vehicleId, plate: s.plate, displayPlate: s.displayPlate);
       try {
@@ -203,13 +206,26 @@ class _CollectFlowScreenState extends State<CollectFlowScreen> {
       showSnack(context, 'Plate corrected to ${s.displayPlate}');
       if (_duration != null) await _selectDuration(_duration!);
     } on NetworkException {
-      if (mounted) {
-        showSnack(
-          context,
-          'Plate correction needs the server. Collect with the current plate or retry later.',
-          error: true,
-        );
-      }
+      // Offline: queue the correction; it syncs before any payment queued after it.
+      await _app.enqueue(SyncType.plateCorrection, {
+        'session_id': _t.sessionId,
+        'plate': newPlate,
+      }, label: 'Plate ${_t.plate} → $newPlate (session ${_t.sessionId})');
+      if (!mounted) return;
+      // The corrected vehicle's dues/credit are unknown offline: they stay on its
+      // balance and are shown at its next visit.
+      setState(
+        () => _t = _t.copyWith(
+          plate: newPlate,
+          displayPlate: plates.display(newPlate),
+          duesPaise: 0,
+          creditPaise: 0,
+          phoneKnown: false,
+          passCandidate: false,
+        ),
+      );
+      showSnack(context, 'Offline: correction saved and will sync. Previous dues of this plate are not shown offline.');
+      if (_duration != null) await _selectDuration(_duration!);
     } catch (e) {
       if (mounted) showError(context, e);
     } finally {
@@ -273,6 +289,7 @@ class _CollectFlowScreenState extends State<CollectFlowScreen> {
               mode: 'CASH',
               payment: res.payment,
               clientUuid: res.clientUuid,
+              receiptCode: res.receiptCode,
               phone: phone.phone,
               phoneOnFile: phone.useOnFile,
               mandatoryQr: true,

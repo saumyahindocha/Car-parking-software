@@ -435,6 +435,7 @@ def handle_exit(db: Session, ev: AnprEvent, plate: str, vclass: str, *, manual_u
     p = db.get(Pass, sess.pass_id) if sess.pass_id else active_pass(db, vehicle.id, ev.ts)
     state, alert = _exit_state_and_alert(db, ev, vehicle, sess)
     disp = _exit_display(ev, vehicle, sess, state=state, pass_=p)
+    disp["pass_expiry_warn_days"] = int(get_setting(db, "pass_expiry_warn_days"))
     events.emit(db, "exit", disp)
     events.emit(db, "session.closed", session_brief(db, sess, vehicle, ev))
     _settlement_message(db, vehicle, sess)
@@ -504,6 +505,7 @@ def _exit_display(ev: AnprEvent, vehicle: Optional[Vehicle], sess: Optional[Park
         "frame_image": image_url((ev.images or {}).get("full_frame")),
         "amount_due_paise": max(0, vehicle.balance_paise) if vehicle else 0,
         "pass_valid_till": None, "pass_days_left": None,
+        "pass_expiry_warn_days": None,
     }
     if pass_ is not None and pass_.ends_at >= ev.ts:
         local_end = pass_.ends_at.astimezone(site_tz())

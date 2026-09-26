@@ -5,6 +5,7 @@ import 'deposit_screen.dart';
 import 'disputes_screen.dart';
 import 'handovers_screen.dart';
 import 'holdings_screen.dart';
+import 'sync_failures_screen.dart';
 import 'zones_screen.dart';
 
 /// Supervisor tools (the supervisor also has all worker screens).
@@ -26,6 +27,7 @@ class SupervisorHome extends StatelessWidget {
         () => go(const SearchScreen(supervisorMode: true)),
       ),
       (Icons.account_balance, 'Bank deposit', 'Record deposit with slip photo', () => go(const DepositScreen())),
+      (Icons.sync_problem, 'Failed syncs', 'Offline actions the server refused', () => go(const SyncFailuresScreen())),
     ];
     return ListView(
       padding: const EdgeInsets.all(12),

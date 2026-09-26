@@ -20,6 +20,7 @@ class ReceiptArgs {
     this.phone,
     this.phoneOnFile = false,
     this.mandatoryQr = true,
+    this.receiptCode,
   });
   final PayRequest request;
   final String mode;
@@ -32,6 +33,10 @@ class ReceiptArgs {
 
   /// Cash: the QR must be shown and "Customer scanned" tapped before moving on.
   final bool mandatoryQr;
+
+  /// Offline cash: receipt code generated on the phone and sent in the CASH
+  /// sync item; the server uses it, so its public link is the real receipt.
+  final String? receiptCode;
 }
 
 /// Digital receipt after a cash payment (spec 6 / 5A): SMS/WhatsApp when a
@@ -74,9 +79,18 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
 
   /// Online: the receipt link. Offline: a provisional text receipt (the final
   /// receipt link is issued when the phone syncs).
-  String get _qrData {
-    final link = _payment?.receipt?.link;
-    if (link != null) return link;
+  String get _qrData => _payment?.receipt?.link ?? _offlineLink ?? _offlineText;
+
+  /// `${public_receipt_base}/<code>` from the cached bootstrap.
+  String? get _offlineLink {
+    final code = a.receiptCode;
+    if (code == null) return null;
+    return _app.bootstrap?.receiptLink(code);
+  }
+
+  /// Plain-text receipt details (shown under the QR offline; the QR itself
+  /// when no receipt link can be built).
+  String get _offlineText {
     final r = a.request;
     final s = _app.settings;
     return [
@@ -88,7 +102,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       if (r.duesPaise > 0) 'Dues cleared: ${rupees(r.duesPaise)}',
       if (r.passName != null) 'Pass: ${r.passName}',
       'Time: ${dateTimeIst(DateTime.now())}',
-      'Ref: ${a.clientUuid.substring(0, 8).toUpperCase()}',
+      'Ref: ${a.receiptCode ?? a.clientUuid.substring(0, 8).toUpperCase()}',
       s.receiptFooter,
     ].join('\n');
   }
@@ -220,15 +234,25 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
         ),
         const SizedBox(height: 8),
         Center(child: PlateText(a.request.target.displayPlate, size: 18)),
-        if (_offline)
-          const Padding(
-            padding: EdgeInsets.only(top: 6),
+        if (_offline) ...[
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
             child: Text(
-              'Offline receipt: the full receipt link is issued when this phone syncs.',
+              _offlineLink != null
+                  ? 'Saved offline. The receipt page opens once this phone syncs.'
+                  : 'Offline receipt: the receipt link is issued when this phone syncs.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.deepOrange, fontSize: 12),
+              style: const TextStyle(color: Colors.deepOrange, fontSize: 12),
             ),
           ),
+          if (_offlineLink != null)
+            Container(
+              margin: const EdgeInsets.only(top: 8),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8)),
+              child: Text(_offlineText, style: const TextStyle(fontSize: 13)),
+            ),
+        ],
         const SizedBox(height: 16),
         BigButton(
           label: 'Customer scanned',

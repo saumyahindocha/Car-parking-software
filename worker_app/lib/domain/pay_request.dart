@@ -156,11 +156,12 @@ class PayRequest {
     'mode': mode,
     'phone': ?phone,
     'client_uuid': clientUuid,
+    'expected_amount_paise': amountPaise,
   };
 
   /// `data` of a CASH / UPI_CLAIM item for `POST /api/sync` (see
   /// `payments._offline_quote`: base is re-checked against the tariff there).
-  Map<String, dynamic> syncData({String? phone, String? txnRef}) => {
+  Map<String, dynamic> syncData({String? phone, String? txnRef, String? receiptCode}) => {
     if (sessionId != null) 'session_id': sessionId,
     'vehicle_id': vehicleId,
     if (durationMinutes != null && purpose == PayPurpose.session) 'duration_minutes': durationMinutes,
@@ -169,6 +170,7 @@ class PayRequest {
     'amount_paise': payablePaise,
     'phone': ?phone,
     'txn_ref': ?txnRef,
+    'receipt_code': ?receiptCode,
   };
 
   /// UPI reference encoding what is paid (session id, else vehicle id).

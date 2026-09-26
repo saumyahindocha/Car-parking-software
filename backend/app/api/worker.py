@@ -125,6 +125,7 @@ class PayIn(BaseModel):
     client_uuid: Optional[str] = None
     parked_location: Optional[str] = None
     expected_amount_paise: Optional[int] = None
+    receipt_code: Optional[str] = None  # phone-generated code (cash), so a QR shown before a timeout stays valid
 
 
 def _quote_for(db: Session, body: PayIn, user: User) -> tuple[payments.Quote, str, Optional[int]]:
@@ -174,7 +175,7 @@ def pay_cash(body: PayIn, db: Session = Depends(get_db), user: User = Depends(co
     p = payments.record_cash(db, q, user=user, purpose=purpose, pass_id=pass_id, phone=_phone(body.phone),
                              override_paise=body.override_paise, override_reason=body.override_reason,
                              supervisor_pin=body.supervisor_pin, client_uuid=body.client_uuid,
-                             parked_location=body.parked_location)
+                             parked_location=body.parked_location, receipt_code=body.receipt_code)
     db.commit()
     return {**payments.payment_dict(db, p), "cash": cash.holding_dict(db, user.id)}
 
@@ -313,6 +314,7 @@ class PassSellIn(BaseModel):
     phone: Optional[str] = None
     client_uuid: Optional[str] = None
     expected_amount_paise: Optional[int] = None
+    receipt_code: Optional[str] = None
 
 
 @router.post("/passes/sell")
@@ -327,7 +329,7 @@ def pass_sell(body: PassSellIn, db: Session = Depends(get_db), user: User = Depe
         pt = db.get(PassType, body.pass_type_id)
         vid = sess_svc.get_or_create_vehicle(db, norm.plate, pt.vehicle_class, utcnow()).id
     pay = PayIn(purpose="PASS", vehicle_id=vid, pass_type_id=body.pass_type_id, phone=body.phone, client_uuid=body.client_uuid,
-                expected_amount_paise=body.expected_amount_paise)
+                expected_amount_paise=body.expected_amount_paise, receipt_code=body.receipt_code)
     return pay_cash(pay, db, user) if body.mode == "CASH" else pay_upi(pay, db, user)
 
 

@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     relay_url: str = ""
     relay_api_key: str = "dev-relay-key"
     public_receipt_base: str = "http://localhost:8080/r"
+    public_site_url: str = ""  # customer site root for renewal links; defaults to the receipt host
 
     # payment gateway: "mock" | "razorpay"
     gateway: str = "mock"

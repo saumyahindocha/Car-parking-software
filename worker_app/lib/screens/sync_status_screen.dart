@@ -158,6 +158,11 @@ class _SyncStatusScreenState extends State<SyncStatusScreen> {
       SyncType.dispute => Icons.report,
       SyncType.handover => Icons.handshake,
       SyncType.receiptShown => Icons.receipt_long,
+      SyncType.contact => Icons.contact_phone,
+      SyncType.alertAck => Icons.notifications_off,
+      SyncType.plateCorrection => Icons.edit,
+      SyncType.shiftOpen => Icons.play_arrow,
+      SyncType.shiftClose => Icons.stop,
       _ => Icons.sync,
     };
     return Card(

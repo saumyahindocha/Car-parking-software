@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 
 import '../../api/models.dart';
 import '../../state/app_state.dart';
-import '../../tariff/tariff.dart' show istOffset;
 import '../../util/format.dart';
 import '../../widgets/common.dart';
 
@@ -144,7 +143,7 @@ class _AssignSheetState extends State<_AssignSheet> {
   }
 
   /// IST wall-clock (held in UTC fields) → real UTC instant.
-  DateTime _toUtc(DateTime istWall) => istWall.subtract(istOffset);
+  DateTime _toUtc(DateTime istWall) => istWall.subtract(siteOffset);
 
   Future<void> _pick(bool start) async {
     final cur = start ? _start : _end;

@@ -7,6 +7,8 @@ from typing import Any, Callable
 from sqlalchemy import event as sa_event
 from sqlalchemy.orm import Session
 
+from .db import SessionLocal
+
 Subscriber = Callable[[str, dict], None]
 _subscribers: list[Subscriber] = []
 
@@ -24,7 +26,7 @@ def emit(db: Session, topic: str, payload: dict[str, Any]) -> None:
     db.info.setdefault("_pending_events", []).append((topic, payload))
 
 
-@sa_event.listens_for(Session, "after_commit")
+@sa_event.listens_for(SessionLocal, "after_commit")
 def _publish(session: Session) -> None:
     pending = session.info.pop("_pending_events", [])
     for topic, payload in pending:
@@ -37,6 +39,6 @@ def _publish(session: Session) -> None:
                 logging.getLogger(__name__).exception("event subscriber failed")
 
 
-@sa_event.listens_for(Session, "after_rollback")
+@sa_event.listens_for(SessionLocal, "after_rollback")
 def _discard(session: Session) -> None:
     session.info.pop("_pending_events", None)

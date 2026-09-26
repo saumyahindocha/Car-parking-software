@@ -85,7 +85,8 @@ def send_reminders(db: Session, now: Optional[datetime] = None) -> int:
     tz = site_tz()
     days = sorted(get_setting(db, "pass_reminder_days") or [5, 1], reverse=True)
     sent = 0
-    base = get_settings().public_receipt_base.rsplit("/", 1)[0]
+    cfg = get_settings()
+    base = (cfg.public_site_url or cfg.public_receipt_base.rsplit("/", 1)[0]).rstrip("/")
     for p in db.scalars(select(Pass).where(Pass.status == "ACTIVE", Pass.ends_at > now,
                                            Pass.ends_at <= now + timedelta(days=max(days) + 1))).all():
         veh = db.get(Vehicle, p.vehicle_id)

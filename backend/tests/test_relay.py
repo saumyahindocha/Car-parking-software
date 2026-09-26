@@ -17,7 +17,8 @@ def test_self_pay_message_applies_once_and_push_contains_quotes(db, gateway, mes
     assert e["masked_plate"] == "MH43••••34" and e["quotes"]["120"] == 1000
     msg = {"id": uuid.uuid4().hex, "kind": "SELF_PAY_PAID", "payload": {
         "plate": "MH43AB1234", "session_id": r.session.id, "duration_minutes": 120, "amount_paise": 1000,
-        "txn_ref": "PS1X0A0B0C", "gateway_ref": "pay_1", "utr": "123", "phone": "9876543210"}}
+        "txn_ref": "PS1X0A0B0C", "gateway_ref": "pay_1", "utr": "123", "phone": "9876543210",
+        "phone_verified": True}}
     assert relay_sync.apply_message(db, msg)["status"] == "applied"
     assert relay_sync.apply_message(db, msg)["status"] == "already_applied"
     p = db.query(Payment).filter_by(txn_ref="PS1X0A0B0C").one()

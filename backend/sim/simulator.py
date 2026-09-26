@@ -476,7 +476,7 @@ class Simulator:
             "plate": r.plate, "session_id": s.id, "vehicle_class": "BIKE", "duration_minutes": q.duration_minutes,
             "amount_paise": q.amount_paise, "base_paise": q.base_paise, "dues_paise": q.dues_paise, "txn_ref": ref,
             "gateway_ref": "pay_" + uuid.uuid4().hex[:12], "utr": str(self.rng.randint(10**11, 10**12 - 1)),
-            "phone": r.phone, "paid_at": self.clock.now.isoformat()}}
+            "phone": r.phone, "phone_verified": bool(r.phone), "paid_at": self.clock.now.isoformat()}}
         relay_sync.apply_message(self.db, msg)
         self.gw.credit_offline(ref, q.amount_paise, at=self.clock.now)  # same merchant account settles it
         assert relay_sync.apply_message(self.db, msg)["status"] == "already_applied"

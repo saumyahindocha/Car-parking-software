@@ -56,6 +56,16 @@ class _PassSellScreenState extends State<PassSellScreen> {
     } catch (_) {}
   }
 
+  /// 409 from /api/passes/sell: the pass price changed. Reload prices and re-select.
+  Future<void> _priceChanged() async {
+    await _app.refreshBootstrap();
+    if (!mounted) return;
+    final types = _app.bootstrap?.passTypesFor(_t.vehicleClass) ?? [];
+    setState(() {
+      _type = types.where((t) => t.id == _type?.id).firstOrNull ?? (types.isEmpty ? null : types.first);
+    });
+  }
+
   PayRequest? get _request {
     final t = _type;
     if (t == null) return null;
@@ -90,7 +100,8 @@ class _PassSellScreenState extends State<PassSellScreen> {
       }
     } catch (e) {
       if (mounted) showError(context, e);
-      setState(() => _busy = false);
+      if (e is ApiException && e.isConflict) await _priceChanged();
+      if (mounted) setState(() => _busy = false);
       return;
     }
     if (!mounted) return;
@@ -145,6 +156,7 @@ class _PassSellScreenState extends State<PassSellScreen> {
               mode: 'CASH',
               payment: res.payment,
               clientUuid: res.clientUuid,
+              receiptCode: res.receiptCode,
               phone: phone,
               phoneOnFile: onFile,
             ),
@@ -155,6 +167,7 @@ class _PassSellScreenState extends State<PassSellScreen> {
       if (mounted) showSnack(context, e.message, error: true);
     } catch (e) {
       if (mounted) showError(context, e);
+      if (e is ApiException && e.isConflict) await _priceChanged();
     } finally {
       if (mounted) setState(() => _busy = false);
     }

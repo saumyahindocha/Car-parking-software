@@ -11,6 +11,8 @@ import '../api/ws_client.dart';
 import '../domain/cash_limit.dart';
 import '../offline/local_store.dart';
 import '../offline/sync_service.dart';
+import '../tariff/tariff.dart' show tzOffsetFor;
+import '../util/format.dart' show siteOffset;
 import 'collect_model.dart';
 
 const String defaultServerUrl = 'http://192.168.10.2:8000';
@@ -98,7 +100,7 @@ class AppState extends ChangeNotifier {
       }
     }
     final cachedBoot = await store.getCache<Map<String, dynamic>>(CacheKeys.bootstrap);
-    if (cachedBoot != null) bootstrap = Bootstrap(cachedBoot);
+    if (cachedBoot != null) _setBootstrap(Bootstrap(cachedBoot));
     final cachedCash = await store.getCache<Map<String, dynamic>>(CacheKeys.cash);
     if (cachedCash != null) serverCash = CashHolding(cachedCash);
     if (loggedIn) await _startSession();
@@ -198,7 +200,7 @@ class AppState extends ChangeNotifier {
     try {
       final b = await api.bootstrap();
       await store.putCache(CacheKeys.bootstrap, b);
-      bootstrap = Bootstrap(b);
+      _setBootstrap(Bootstrap(b));
       final u = bootstrap!.user;
       user = u;
       await prefs.setString(_Keys.user, jsonEncode(u.toJson()));
@@ -209,6 +211,15 @@ class AppState extends ChangeNotifier {
       // keep cached
     }
   }
+
+  void _setBootstrap(Bootstrap b) {
+    bootstrap = b;
+    // Site timezone for display, zone windows and the offline tariff (IST fallback).
+    siteOffset = tzOffsetFor(b.siteTimezone);
+  }
+
+  /// UTC offset of the site, from the cached bootstrap.
+  Duration get siteTzOffset => tzOffsetFor(bootstrap?.siteTimezone);
 
   Future<void> refreshCash() async {
     if (user == null || !user!.isCollector) return;
@@ -240,6 +251,27 @@ class AppState extends ChangeNotifier {
   );
 
   bool get cashAllowed => (bootstrap?.cashAllowed ?? true) && (bootstrap?.settings.cashEnabled ?? true);
+
+  /// Acknowledge an alert; offline it is queued as ALERT_ACK. Returns true if queued.
+  Future<bool> ackAlert(int alertId, {String? note}) async {
+    try {
+      if (!online) throw NetworkException('offline');
+      await api.ackAlert(alertId, note: note);
+      return false;
+    } on NetworkException {
+      await enqueue(SyncType.alertAck, {'alert_id': alertId, 'note': ?note}, label: 'Alert #$alertId noted');
+      return true;
+    }
+  }
+
+  /// Alert ids acknowledged on this phone but not yet synced.
+  Future<Set<int>> locallyAckedAlerts() async {
+    final items = await store.items(statuses: [QueueStatus.pending], userId: user?.id);
+    return {
+      for (final i in items)
+        if (i.type == SyncType.alertAck && i.data['alert_id'] is int) i.data['alert_id'] as int,
+    };
+  }
 
   /// Queue an offline action and try to send it right away.
   Future<QueueItem> enqueue(

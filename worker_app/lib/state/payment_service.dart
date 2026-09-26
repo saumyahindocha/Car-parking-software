@@ -1,6 +1,7 @@
 import '../api/api_client.dart';
 import '../api/models.dart';
 import '../domain/pay_request.dart';
+import '../domain/upi.dart' show newReceiptCode;
 import '../offline/local_store.dart';
 import '../util/format.dart';
 import 'app_state.dart';
@@ -15,10 +16,13 @@ class CashBlocked implements Exception {
 /// Outcome of recording a cash payment: either the server's payment (online)
 /// or the queued offline item (to be synced).
 class CashResult {
-  CashResult({required this.clientUuid, this.payment, this.queued});
+  CashResult({required this.clientUuid, this.payment, this.queued, this.receiptCode});
   final String clientUuid;
   final PaymentInfo? payment;
   final QueueItem? queued;
+
+  /// Offline: receipt code generated on the phone (the server adopts it on sync).
+  final String? receiptCode;
   bool get offline => payment == null;
 }
 
@@ -67,25 +71,37 @@ class PaymentService {
           'Collect the system amount, or wait until the server is reachable.',
         );
       }
+      final code = newReceiptCode();
       final item = await app.enqueue(
         SyncType.cash,
-        r.syncData(phone: phone),
+        r.syncData(phone: phone, receiptCode: code),
         clientUuid: uuid,
         amountPaise: r.payablePaise,
         label: 'Cash ${rupees(r.payablePaise)} · ${r.target.displayPlate} · ${r.describe()}',
       );
       if (r.sessionId != null) app.collect?.markCollected(r.sessionId!);
-      return CashResult(clientUuid: uuid, queued: item);
+      return CashResult(clientUuid: uuid, queued: item, receiptCode: code);
     }
   }
 
   /// Offline UPI: the customer showed a success screen for the locally generated
   /// intent QR. Recorded as CLAIMED_OFFLINE via the sync queue; reconciliation
   /// later confirms it by txn_ref.
-  Future<QueueItem> queueUpiClaim(PayRequest r, {required String txnRef, String? phone}) async {
+  ///
+  /// [existingAmountPaise]: the server already created this offline QR (gateway
+  /// down) and the phone then lost the server. Sending the server's `txn_ref`
+  /// and exact amount makes the sync claim that payment instead of a new one.
+  Future<QueueItem> queueUpiClaim(
+    PayRequest r, {
+    required String txnRef,
+    String? phone,
+    int? existingAmountPaise,
+  }) async {
+    final data = r.syncData(phone: phone, txnRef: txnRef);
+    if (existingAmountPaise != null) data['amount_paise'] = existingAmountPaise;
     final item = await app.enqueue(
       SyncType.upiClaim,
-      r.syncData(phone: phone, txnRef: txnRef),
+      data,
       amountPaise: 0,
       label: 'UPI claim ${rupees(r.payablePaise)} · ${r.target.displayPlate} · $txnRef',
     );

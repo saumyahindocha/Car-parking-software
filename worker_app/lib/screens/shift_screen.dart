@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../api/api_client.dart';
 import '../api/models.dart';
+import '../offline/local_store.dart';
 import '../state/app_state.dart';
 import '../util/format.dart';
 import '../widgets/common.dart';
@@ -26,6 +27,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
   String? _error;
   bool _fromCache = false;
   Map<String, dynamic>? _closed;
+  String? _queued;
 
   AppState get _app => context.read<AppState>();
 
@@ -84,8 +86,16 @@ class _ShiftScreenState extends State<ShiftScreen> {
     }
     setState(() => _busy = true);
     try {
+      if (!_app.online) throw NetworkException('offline');
       await _app.api.openShift(zoneId: zoneId);
       await _load();
+    } on NetworkException {
+      await _app.enqueue(SyncType.shiftOpen, {'zone_id': ?zoneId}, label: 'Open shift');
+      if (mounted) {
+        setState(
+          () => _queued = 'Shift opening saved offline — it opens on the server at this time when the phone syncs.',
+        );
+      }
     } catch (e) {
       if (mounted) showError(context, e);
     } finally {
@@ -94,11 +104,15 @@ class _ShiftScreenState extends State<ShiftScreen> {
   }
 
   Future<void> _close() async {
-    final pending = _app.sync?.pendingCount ?? 0;
-    if (pending > 0) {
-      showSnack(context, 'Sync the $pending offline item(s) before closing the shift.', error: true);
+    if ((_app.sync?.pendingCount ?? 0) > 0 && _app.online) {
+      // Send queued cash etc. first so the server's totals are complete.
       await _app.sync?.flush();
-      return;
+      if (!mounted) return;
+      final left = _app.sync?.pendingCount ?? 0;
+      if (left > 0 && _app.online) {
+        showSnack(context, '$left offline item(s) could not be synced yet. Try again in a moment.', error: true);
+        return;
+      }
     }
     final held = _app.cashPosition.heldPaise;
     String? note;
@@ -121,10 +135,21 @@ class _ShiftScreenState extends State<ShiftScreen> {
     }
     setState(() => _busy = true);
     try {
+      if (!_app.online) throw NetworkException('offline');
       final r = await _app.api.closeShift(note: note);
       await _app.refreshCash();
       if (mounted) setState(() => _closed = r);
       await _load();
+    } on NetworkException {
+      // Queued after every earlier offline item, so they are applied first.
+      await _app.enqueue(SyncType.shiftClose, {'note': ?note}, label: 'Close shift');
+      if (mounted) {
+        setState(
+          () => _queued =
+              'Shift close saved offline — it is applied when the phone syncs. '
+              'If the server refuses it (e.g. a handover still pending), your supervisor is alerted.',
+        );
+      }
     } catch (e) {
       if (mounted) showError(context, e);
     } finally {
@@ -164,6 +189,14 @@ class _ShiftScreenState extends State<ShiftScreen> {
               padding: EdgeInsets.all(24),
               child: Center(child: CircularProgressIndicator()),
             ),
+          if (_queued != null)
+            Card(
+              color: Colors.orange.shade50,
+              child: ListTile(
+                leading: const Icon(Icons.cloud_off, color: Colors.deepOrange),
+                title: Text(_queued!),
+              ),
+            ),
           if (_closed != null)
             Card(
               color: Colors.green.shade50,
@@ -185,7 +218,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
             Column(
               children: [
                 const EmptyState('No shift open.', icon: Icons.schedule),
-                BigButton(label: 'Open shift', icon: Icons.play_arrow, onPressed: _busy || _fromCache ? null : _open),
+                BigButton(label: 'Open shift', icon: Icons.play_arrow, onPressed: _busy ? null : _open),
               ],
             ),
           if (s != null) ...[
@@ -220,7 +253,7 @@ class _ShiftScreenState extends State<ShiftScreen> {
               icon: Icons.stop,
               color: dueRed,
               outlined: true,
-              onPressed: _busy || _fromCache ? null : _close,
+              onPressed: _busy ? null : _close,
             ),
           ],
         ],

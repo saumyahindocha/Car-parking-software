@@ -12,6 +12,10 @@ class SyncType {
   static const handover = 'HANDOVER';
   static const receiptShown = 'RECEIPT_SHOWN';
   static const contact = 'CONTACT';
+  static const alertAck = 'ALERT_ACK';
+  static const plateCorrection = 'PLATE_CORRECTION';
+  static const shiftOpen = 'SHIFT_OPEN';
+  static const shiftClose = 'SHIFT_CLOSE';
 }
 
 class QueueStatus {

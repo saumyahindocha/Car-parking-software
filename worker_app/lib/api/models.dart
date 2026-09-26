@@ -137,7 +137,9 @@ class Bootstrap {
       tariffs = _l(raw['tariffs']).map((e) => Tariff.fromJson(_m(e))).toList(),
       passTypes = _l(raw['pass_types']).map((e) => PassTypeInfo.fromJson(_m(e))).toList(),
       gates = {for (final g in _l(raw['gates'])) _s(_m(g)['id']) ?? '': _s(_m(g)['name']) ?? ''},
-      serverTime = parseTime(raw['server_time']);
+      serverTime = parseTime(raw['server_time']),
+      siteTimezone = _s(raw['site_timezone']),
+      publicReceiptBase = _stripSlash(_s(raw['public_receipt_base']));
 
   final Map<String, dynamic> raw;
   final UserInfo user;
@@ -149,6 +151,24 @@ class Bootstrap {
   final List<PassTypeInfo> passTypes;
   final Map<String, String> gates;
   final DateTime? serverTime;
+
+  /// IANA zone of the site (e.g. "Asia/Kolkata"); null on older servers.
+  final String? siteTimezone;
+
+  /// Base of public receipt links, e.g. "https://pay.example-parking.in/r".
+  final String? publicReceiptBase;
+
+  static String? _stripSlash(String? s) {
+    if (s == null || s.isEmpty) return null;
+    var out = s;
+    while (out.endsWith('/')) {
+      out = out.substring(0, out.length - 1);
+    }
+    return out;
+  }
+
+  /// Public receipt link for a receipt code (null if the base is unknown).
+  String? receiptLink(String code) => publicReceiptBase == null ? null : '$publicReceiptBase/$code';
 
   String zoneName(int? id) {
     if (id == null) return '—';
@@ -252,7 +272,9 @@ class VehicleInfo {
   List<PaymentInfo> get payments => _l(raw['payments']).map((e) => PaymentInfo(_m(e))).toList();
   List<LedgerLine> get ledger => _l(raw['ledger']).map((e) => LedgerLine(_m(e))).toList();
   List<PassBrief> get passes => _l(raw['passes']).map((e) => PassBrief(_m(e))).toList();
-  String? get plateImage => openSession?.plateImage;
+
+  /// Latest plate crop of this vehicle (server `last_plate_image`), else the open session's.
+  String? get plateImage => _s(raw['last_plate_image']) ?? openSession?.plateImage;
 }
 
 class ReceiptInfo {

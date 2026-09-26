@@ -77,25 +77,37 @@ The phone keeps working when the edge server (or the Wi-Fi) is down. A red banne
 * **Cash** works fully offline: the payment is saved in the local queue as a `CASH` sync item with
   a `client_uuid` and the time it was taken. The **cash-in-hand limit is enforced on the phone**:
   server holding + cash still waiting to sync (and cash whose sync failed) — collection is blocked at
-  the limit, with a warning banner from 80 %. The mobile number is asked every time; if declined, a
-  provisional receipt QR is shown full-screen and the worker must tap **Customer scanned**
-  (queued as `RECEIPT_SHOWN`); the real receipt (SMS or link) is issued when the item syncs.
+  the limit, with a warning banner from 80 %. The mobile number is asked every time; if declined, the
+  receipt QR is shown full-screen and the worker must tap **Customer scanned** (queued as
+  `RECEIPT_SHOWN`). The phone generates the 8-character receipt code and sends it in the `CASH` item
+  (`receipt_code`); the server adopts it, so the offline QR is already the real link
+  `${public_receipt_base}/<code>` (from the cached bootstrap), with the details also shown as text.
 * **UPI offline**: the phone builds a standard UPI intent QR (`upi://pay?pa=…&am=…&tr=…`) for the exact
   amount with a transaction reference in the backend format `P{S|V}{base36 id}X{6 hex}` (session id,
   or vehicle id for dues/pass). When the customer shows the success screen the worker taps
   **Customer shows success** → queued as `UPI_CLAIM` (recorded `CLAIMED_OFFLINE`, confirmed later by
   reconciliation against the settlement by reference). If only the payment gateway is down but the
   server is up, the server returns an offline intent QR and the claim goes through
-  `POST /api/payments/{id}/claim-offline`.
+  `POST /api/payments/{id}/claim-offline`; if the server disappears before that, the claim is queued
+  with that payment's `txn_ref` and amount and the server claims the same payment on sync.
+* **Switching from UPI to cash / backing out of the QR screen** cancels the unpaid UPI payment
+  (`POST /api/payments/{id}/cancel`). If the customer actually paid meanwhile, the server confirms it
+  instead and the screen turns green.
 * **Also queued offline**: guard disputes (`DISPUTE`), cash handover declarations (`HANDOVER`),
-  receipt shown (`RECEIPT_SHOWN`), customer mobile numbers (`CONTACT`).
+  receipt shown (`RECEIPT_SHOWN`), customer mobile numbers (`CONTACT`), alert acknowledgements
+  (`ALERT_ACK`), plate corrections (`PLATE_CORRECTION`), shift open/close (`SHIFT_OPEN`, `SHIFT_CLOSE`,
+  applied after every earlier queued item).
 * **Sync**: `POST /api/sync` in creation order, every 20 s, on reconnect, and on *Retry now*. Each
   item is idempotent on its `client_uuid` (a request that timed out after reaching the server is
   safely re-sent). An item the server rejects is marked **failed** with the server's reason and
-  stays visible in the Sync tab for the supervisor; the rest of the batch still applies. Synced
+  stays visible in the Sync tab; the server also raises a `SYNC_FAILED` alert, listed for supervisors
+  under *Supervisor → Failed syncs*. The rest of the batch still applies. Synced
   items are kept 7 days as history. Pending items are never deleted, even on logout.
-* Needs the server (clear message shown): plate correction, amount overrides, selling a pass to a
-  plate never seen before, shift open/close, supervisor screens, acknowledging guard alerts.
+* Needs the server (clear message shown): amount overrides, selling a pass to a plate never seen
+  before, supervisor screens. After an offline plate correction, the corrected plate's previous dues
+  are not shown (they stay on its balance for the next visit).
+* Times, zone windows and the overnight tariff rule use the site's `site_timezone` from bootstrap
+  (fixed-offset zones; IST if unknown).
 
 ## Live updates
 

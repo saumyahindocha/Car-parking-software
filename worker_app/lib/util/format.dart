@@ -2,6 +2,9 @@ import 'package:intl/intl.dart';
 
 import '../tariff/tariff.dart' show istOffset;
 
+/// UTC offset of the site; set from `/api/bootstrap` `site_timezone` (default IST).
+Duration siteOffset = istOffset;
+
 /// "₹1,250" (or "₹12.50" when there are paise).
 String rupees(int? paise) {
   final p = paise ?? 0;
@@ -12,8 +15,8 @@ String rupees(int? paise) {
   return '${neg ? '-' : ''}₹$whole${frac == 0 ? '' : '.${frac.toString().padLeft(2, '0')}'}';
 }
 
-/// Site-local (IST) wall-clock time for a UTC instant.
-DateTime toIst(DateTime t) => t.toUtc().add(istOffset);
+/// Site-local wall-clock time (IST unless the server says otherwise) for an instant.
+DateTime toIst(DateTime t) => t.toUtc().add(siteOffset);
 
 String timeIst(DateTime? t) => t == null ? '—' : DateFormat('HH:mm').format(toIst(t));
 

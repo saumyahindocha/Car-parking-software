@@ -14,7 +14,7 @@ from typing import Any
 from sqlalchemy import event, insert, inspect
 from sqlalchemy.orm import Session
 
-from .db import utcnow
+from .db import SessionLocal, utcnow
 from .models import FINANCIAL_TABLES, AuditLog
 
 current_user_id: contextvars.ContextVar[int | None] = contextvars.ContextVar("current_user_id", default=None)
@@ -49,7 +49,7 @@ def _pk(obj) -> str:
     return ""
 
 
-@event.listens_for(Session, "before_flush")
+@event.listens_for(SessionLocal, "before_flush")
 def _guard(session: Session, flush_context, instances) -> None:
     for obj in session.deleted:
         table = obj.__table__.name
@@ -74,7 +74,7 @@ def _guard(session: Session, flush_context, instances) -> None:
         befores[id(obj)] = before
 
 
-@event.listens_for(Session, "after_flush")
+@event.listens_for(SessionLocal, "after_flush")
 def _record(session: Session, flush_context) -> None:
     uid = session.info.get("user_id") or current_user_id.get()
     now = utcnow()

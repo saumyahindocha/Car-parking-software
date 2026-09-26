@@ -216,12 +216,19 @@ class _UpiPayScreenState extends State<UpiPayScreen> {
     setState(() => _busy = true);
     try {
       if (_stage == _Stage.offlineServer && _payment != null) {
-        final np = await _app.api.claimOffline(_payment!.id);
-        if (_phone != null) await PaymentService(_app).saveContact(_r.vehicleId, _phone!);
-        setState(() {
-          _payment = np;
-          _stage = _Stage.claimed;
-        });
+        final pay = _payment!;
+        try {
+          if (!_app.online) throw NetworkException('offline');
+          final np = await _app.api.claimOffline(pay.id);
+          if (_phone != null) await PaymentService(_app).saveContact(_r.vehicleId, _phone!);
+          setState(() => _payment = np);
+        } on NetworkException {
+          // Server created this offline QR, then went away: queue a claim of
+          // that same payment (matched by its txn_ref and exact amount).
+          await PaymentService(_app)
+              .queueUpiClaim(_r, txnRef: pay.txnRef ?? _txnRef!, phone: _phone, existingAmountPaise: pay.amountPaise);
+        }
+        setState(() => _stage = _Stage.claimed);
       } else {
         await PaymentService(_app).queueUpiClaim(_r, txnRef: _txnRef!, phone: _phone);
         setState(() => _stage = _Stage.claimed);
@@ -232,6 +239,61 @@ class _UpiPayScreenState extends State<UpiPayScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// The customer did not pay (switched to cash, or left). Cancels a server
+  /// UPI payment that is still INITIATED; if it was paid meanwhile the server
+  /// confirms it instead and the screen turns green.
+  Future<void> _abandon() async {
+    final pay = _payment;
+    final cancellable = pay != null && (_stage == _Stage.waiting || _stage == _Stage.offlineServer);
+    if (!cancellable) {
+      if (mounted) Navigator.pop(context, false);
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      final np = await _app.api.cancelPayment(pay.id, reason: 'customer did not pay by UPI (worker)');
+      if (!mounted) return;
+      if (np.status == PayStatus.confirmed) {
+        _poll?.cancel();
+        setState(() {
+          _payment = np;
+          _stage = _Stage.confirmed;
+        });
+        showSnack(context, 'The UPI payment just arrived — no cash needed.');
+        _afterConfirmed();
+        return;
+      }
+      if (np.status == PayStatus.claimedOffline) {
+        setState(() {
+          _payment = np;
+          _stage = _Stage.claimed;
+        });
+        return;
+      }
+    } on NetworkException {
+      // Leave it INITIATED: a late payment is still confirmed by webhook / reconciliation.
+    } on ApiException catch (e) {
+      // e.g. it was confirmed between our last poll and the cancel: re-read it.
+      try {
+        final np = await _app.api.payment(pay.id);
+        if (np.isDone && mounted) {
+          _onUpdate(np);
+          if (_stage == _Stage.waiting) {
+            setState(() {
+              _payment = np;
+              _stage = np.status == PayStatus.confirmed ? _Stage.confirmed : _Stage.claimed;
+            });
+          }
+          return;
+        }
+      } catch (_) {}
+      if (mounted) showSnack(context, e.detail, error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+    if (mounted) Navigator.pop(context, false);
   }
 
   Future<void> _addPhone() async {
@@ -252,8 +314,12 @@ class _UpiPayScreenState extends State<UpiPayScreen> {
   @override
   Widget build(BuildContext context) {
     final green = _stage == _Stage.confirmed || _stage == _Stage.claimed;
+    final pending = _stage == _Stage.waiting || _stage == _Stage.offlineServer;
     return PopScope(
-      canPop: !_busy,
+      canPop: !_busy && !pending,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && pending && !_busy) _abandon();
+      },
       child: Scaffold(
         backgroundColor: green ? paidGreen : null,
         appBar: AppBar(
@@ -402,10 +468,7 @@ class _UpiPayScreenState extends State<UpiPayScreen> {
           icon: const Icon(Icons.sms),
           label: Text(_phone == null ? 'Add customer mobile for SMS receipt (optional)' : 'Receipt to ${_phone!}'),
         ),
-        TextButton(
-          onPressed: _busy ? null : () => Navigator.pop(context, false),
-          child: const Text('Customer did not pay / switch to cash'),
-        ),
+        TextButton(onPressed: _busy ? null : _abandon, child: const Text('Customer did not pay / switch to cash')),
       ],
     );
   }

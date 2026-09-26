@@ -91,14 +91,18 @@ def build_push(db: Session, since: Optional[datetime]) -> dict:
         ev = db.get(AnprEvent, s.entry_event_id) if s.entry_event_id else None
         entries.append({"session_id": s.id, "plate": v.plate, "masked_plate": plates.mask(v.plate),
                         "vehicle_class": s.vehicle_class, "entry_at": s.entry_at.isoformat(), "status": s.status,
-                        "gate_id": s.entry_gate, "quotes": quotes,
+                        "gate_id": s.entry_gate, "quotes": quotes, "dues_paise": max(0, v.balance_paise),
+                        "credit_paise": max(0, -v.balance_paise),
                         "thumb_b64": blurred_thumb((ev.images or {}).get("plate_crop")) if ev and since is None else None})
-    vstmt = select(Vehicle)
     if since is not None:
         changed = select(LedgerEntry.vehicle_id).where(LedgerEntry.created_at >= since)
-        vstmt = vstmt.where((Vehicle.last_seen >= since) | Vehicle.id.in_(changed))
+        vstmt = select(Vehicle).where((Vehicle.last_seen >= since) | Vehicle.id.in_(changed))
+    else:
+        # full push: every vehicle a customer could look up (dues/credit, a pass, or a verified phone)
+        pass_vids = select(Pass.vehicle_id).where(Pass.status == "ACTIVE", Pass.ends_at > now - timedelta(days=30))
+        vstmt = select(Vehicle).where((Vehicle.balance_paise != 0) | Vehicle.phone.is_not(None) | Vehicle.id.in_(pass_vids))
     vehicles = []
-    for v in db.scalars(vstmt.limit(5000)).all():
+    for v in db.scalars(vstmt).all():
         p = active_pass(db, v.id, now)
         hist = []
         if v.phone:
@@ -109,7 +113,7 @@ def build_push(db: Session, since: Optional[datetime]) -> dict:
                              "status": s.status})
         vehicles.append({"plate": v.plate, "vehicle_class": v.vehicle_class, "balance_paise": v.balance_paise,
                          "phone_hash": phone_hash(v.phone) if v.phone else None,
-                         "pass": pass_dict(db, p) if p else None, "history": hist})
+                         "pass": _public_pass(db, p) if p else None, "history": hist})
     rstmt = select(Receipt).where(Receipt.synced_to_relay.is_(False)).limit(2000)
     receipts = db.scalars(rstmt).all()
     return {
@@ -119,9 +123,17 @@ def build_push(db: Session, since: Optional[datetime]) -> dict:
         "pass_types": [{"id": p.id, "vehicle_class": p.vehicle_class, "name": p.name, "period_unit": p.period_unit,
                         "period_value": p.period_value, "price_paise": p.price_paise}
                        for p in db.scalars(select(PassType).where(PassType.active.is_(True)))],
-        "settings": {k: get_setting(db, k) for k in ("lot_name", "receipt_footer", "duration_buttons", "upi_vpa",
-                                                     "upi_payee_name", "gstin")},
+        "settings": {**{k: get_setting(db, k) for k in ("lot_name", "lot_address", "receipt_footer", "duration_buttons",
+                                                        "upi_vpa", "upi_payee_name", "gstin", "gst_rate_percent",
+                                                        "pass_expiry_warn_days")},
+                     "site_timezone": get_settings().site_timezone},
     }
+
+
+def _public_pass(db: Session, p: Pass) -> dict:
+    d = pass_dict(db, p)
+    d.pop("phone", None)  # never send phone numbers to the cloud
+    return d
 
 
 # ------------------------------------------------------------------ inbound
@@ -136,9 +148,17 @@ def apply_message(db: Session, msg: dict) -> dict:
     elif kind == "DISPUTE":
         v = sess_svc.find_vehicle(db, plates.normalise(p["plate"]))
         if v is None:
-            result = {"error": "unknown plate"}
+            from .models import Alert
+
+            a = Alert(kind="DISPUTE_UNKNOWN_PLATE", severity="WARN",
+                      message=f"Customer dispute for unknown plate {p.get('plate')}",
+                      data={k: val for k, val in p.items() if k != "phone"})
+            db.add(a)
+            db.flush()
+            result = {"alert_id": a.id, "note": "unknown plate; sent to supervisor"}
         else:
             d = disputes.raise_dispute(db, vehicle_id=v.id, raised_by_role="CUSTOMER", claimed_paise=p.get("claimed_paise"),
+                                       session_id=_session_at(db, v.id, p.get("claimed_when")),
                                        claimed_mode=p.get("claimed_mode", "CASH"), claimed_when=p.get("claimed_when"),
                                        note=p.get("note"), client_uuid=f"relay-{msg['id']}")
             result = {"dispute_id": d.id}
@@ -162,6 +182,26 @@ def apply_message(db: Session, msg: dict) -> dict:
     return {"id": msg["id"], "status": "applied", **result}
 
 
+def _session_at(db: Session, vehicle_id: int, when: Optional[str]) -> Optional[int]:
+    """The vehicle's session covering the customer's 'when' (ISO date or date-time), if any."""
+    if not when:
+        return None
+    try:
+        t = datetime.fromisoformat(when)
+    except ValueError:
+        return None
+    tz = site_tz()
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=tz)
+    date_only = len(when) <= 10
+    start = datetime.combine(t.date(), datetime.min.time(), tzinfo=tz) if date_only else t
+    end = start + timedelta(days=1) if date_only else t
+    s = db.scalars(select(ParkingSession).where(
+        ParkingSession.vehicle_id == vehicle_id, ParkingSession.entry_at <= end,
+        (ParkingSession.exit_at.is_(None)) | (ParkingSession.exit_at >= start)).order_by(ParkingSession.entry_at.desc())).first()
+    return s.id if s else None
+
+
 def _apply_payment(db: Session, kind: str, p: dict) -> dict:
     existing = db.scalars(select(Payment).where(Payment.txn_ref == p["txn_ref"])).first()
     if existing is not None:
@@ -182,16 +222,27 @@ def _apply_payment(db: Session, kind: str, p: dict) -> dict:
                   mode=PayMode.UPI, amount_paise=int(p["amount_paise"]), base_paise=int(p.get("base_paise", 0)),
                   dues_paise=int(p.get("dues_paise", 0)), duration_minutes=p.get("duration_minutes"), channel="SELF_PAY",
                   txn_ref=p["txn_ref"], gateway_ref=p.get("gateway_ref"), utr=p.get("utr"), status=PayStatus.INITIATED,
-                  phone=p.get("phone"), created_at=paid_at)
+                  phone=p.get("phone") if p.get("phone_verified") else None, created_at=paid_at)
     db.add(pay)
     db.flush()
-    if p.get("phone") and not vehicle.phone:
+    if p.get("phone") and p.get("phone_verified") and not vehicle.phone:
         vehicle.phone = "".join(c for c in p["phone"] if c.isdigit())[-10:]
     if sess is not None and p.get("duration_minutes"):
         sess.est_duration_minutes = p["duration_minutes"]
     payments.confirm_payment(db, pay, gateway_ref=p.get("gateway_ref"), utr=p.get("utr"), at=paid_at,
                              note="self-pay via relay")
     return {"payment_id": pay.id}
+
+
+def _alert_failed_message(db: Session, msg: dict, err: Exception) -> None:
+    from .models import Alert
+
+    key = f"relay:{msg.get('id')}"
+    if db.scalars(select(Alert).where(Alert.kind == "RELAY_APPLY_FAILED", Alert.event_id == key)).first() is None:
+        db.add(Alert(kind="RELAY_APPLY_FAILED", severity="CRIT", event_id=key,
+                     message=f"Customer action {msg.get('kind')} from the relay could not be applied: {err}",
+                     data={"msg_id": msg.get("id"), "kind": msg.get("kind")}))
+        db.commit()
 
 
 # ------------------------------------------------------------------ loop
@@ -215,18 +266,19 @@ def sync_once(db: Session, client: RelayClient) -> dict:
     """Pull and apply inbound messages first (money), then push state."""
     cursor = _state(db, "cursor")
     data = client.pull(cursor)
-    applied = []
+    applied, failed = [], 0
     for msg in data.get("messages", []):
         try:
             applied.append(apply_message(db, msg))
             db.commit()
-        except Exception:
+        except Exception as e:  # keep going: one bad message must not block the queue
             db.rollback()
+            failed += 1
             log.exception("relay message %s failed", msg.get("id"))
-            break
+            _alert_failed_message(db, msg, e)
     if applied:
         client.ack([a["id"] for a in applied])
-    if data.get("cursor"):
+    if data.get("cursor") and not failed:
         _set_state(db, "cursor", data["cursor"])
     last = _state(db, "last_push")
     full_due = _state(db, "last_full") is None or (

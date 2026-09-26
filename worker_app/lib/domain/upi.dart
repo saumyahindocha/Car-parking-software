@@ -78,3 +78,17 @@ String upiIntentUri({
 }) =>
     'upi://pay?pa=${pyQuote(vpa)}&pn=${pyQuote(payee)}&am=${paiseToAmount(amountPaise)}&cu=INR'
     '&tr=${pyQuote(txnRef)}&tn=${pyQuote(note)}';
+
+/// Alphabet of backend receipt codes (`receipts._ALPHABET`: no 0/1/I/O/l).
+const String receiptCodeAlphabet = '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+
+/// An 8-character receipt code generated on the phone for offline cash; the
+/// server adopts it (CASH sync item `receipt_code`) if unused, so the receipt
+/// QR shown offline is the real link.
+String newReceiptCode({Random? random}) {
+  final rnd = random ?? Random.secure();
+  return List.generate(8, (_) => receiptCodeAlphabet[rnd.nextInt(receiptCodeAlphabet.length)]).join();
+}
+
+bool isValidReceiptCode(String? code) =>
+    code != null && code.length == 8 && code.split('').every(receiptCodeAlphabet.contains);

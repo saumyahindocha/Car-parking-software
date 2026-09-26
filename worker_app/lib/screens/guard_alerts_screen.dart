@@ -59,11 +59,12 @@ class _GuardAlertsScreenState extends State<GuardAlertsScreen> {
     if (!silent) setState(() => _loading = true);
     try {
       final list = await _app.api.alerts(kind: 'EXIT_UNPAID', openOnly: true, hours: 12);
+      final acked = await _app.locallyAckedAlerts();
       if (!mounted) return;
       setState(() {
         _alerts
           ..clear()
-          ..addEntries(list.map((a) => MapEntry(a.id, a)));
+          ..addEntries(list.where((a) => !acked.contains(a.id)).map((a) => MapEntry(a.id, a)));
         _error = null;
       });
     } catch (e) {
@@ -75,8 +76,10 @@ class _GuardAlertsScreenState extends State<GuardAlertsScreen> {
 
   Future<void> _ack(AlertInfo a, {String? note}) async {
     try {
-      await _app.api.ackAlert(a.id, note: note);
+      final queued = await _app.ackAlert(a.id, note: note);
+      if (!mounted) return;
       setState(() => _alerts.remove(a.id));
+      if (queued) showSnack(context, 'Offline: noted on this phone, will sync.');
     } catch (e) {
       if (mounted) showError(context, e);
     }
