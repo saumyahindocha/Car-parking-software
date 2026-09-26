@@ -44,10 +44,12 @@ def now():
     return datetime.now(timezone.utc)
 
 
-def entry(sid, plate, minutes_ago=30, quotes=None, thumb="dGh1bWI=", status="OPEN", masked=None):
+def entry(sid, plate, minutes_ago=30, quotes=None, thumb="dGh1bWI=", status="OPEN", masked=None, dues=None,
+          credit=None):
     from relay.plates import mask
 
-    return {"session_id": sid, "plate": plate, "masked_plate": masked or mask(plate), "vehicle_class": "BIKE",
+    extra = {} if dues is None else {"dues_paise": dues, "credit_paise": credit or 0}
+    return {**extra, "session_id": sid, "plate": plate, "masked_plate": masked or mask(plate), "vehicle_class": "BIKE",
             "entry_at": (now() - timedelta(minutes=minutes_ago)).isoformat(), "status": status, "gate_id": "G1",
             "quotes": quotes or {"120": 2000, "240": 3000, "1440": 6000}, "thumb_b64": thumb}
 

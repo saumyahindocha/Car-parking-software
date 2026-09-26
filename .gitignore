@@ -18,3 +18,4 @@ build/
 .flutter-plugins*
 worker_app/android/local.properties
 *.log
+.demo/

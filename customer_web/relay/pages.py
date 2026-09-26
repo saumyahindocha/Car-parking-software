@@ -86,9 +86,12 @@ async def pay_find(request: Request, db: Session = Depends(get_db)):
 
 def _entry_page(request: Request, db: Session, entry: Entry, revealed: bool, status: int = 200):
     s = settings_of(request)
-    veh = db.get(Vehicle, entry.plate)
     options = sorted(((int(k), v) for k, v in entry.quotes.items() if int(v) > 0), key=lambda x: x[0])
-    dues = max(0, veh.balance_paise) if veh else 0
+    if entry.dues_paise is not None:
+        dues = entry.dues_paise
+    else:
+        veh = db.get(Vehicle, entry.plate)
+        dues = max(0, veh.balance_paise) if veh else 0
     reveal = sign(s.secret_key, {"sid": entry.session_id}, 1800, "reveal") if revealed else ""
     return render(request, db, "pay_entry.html", {
         "entry": entry, "plate_shown": display(entry.plate) if revealed else entry.masked_plate, "options": options,

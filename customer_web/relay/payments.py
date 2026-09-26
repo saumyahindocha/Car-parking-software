@@ -83,9 +83,14 @@ def self_pay_amounts(db: Session, entry: Entry, duration: int) -> Amounts:
     amount = int(amount)
     if amount <= 0:
         raise PaymentError("nothing to pay")
-    veh = db.get(Vehicle, entry.plate)
-    # quotes already include the vehicle's dues (edge build_push: charge + balance)
-    dues = min(amount, max(0, veh.balance_paise)) if veh else 0
+    # quotes already include previous dues (edge build_push: charge + balance); the edge sends the dues part
+    # per entry. Older edges did not: fall back to the vehicle balance from the last push.
+    if entry.dues_paise is not None:
+        known = entry.dues_paise
+    else:
+        veh = db.get(Vehicle, entry.plate)
+        known = max(0, veh.balance_paise) if veh else 0
+    dues = min(amount, max(0, known))
     return Amounts(amount, amount - dues, dues)
 
 
@@ -147,6 +152,8 @@ def start_pass(db: Session, gw: PaymentGateway, plate: str, pt: PassType, *, pho
 def _payload(intent: PaymentIntent) -> tuple[str, dict]:
     common = {"plate": intent.plate, "amount_paise": intent.amount_paise, "txn_ref": intent.txn_ref,
               "gateway_ref": intent.gateway_ref, "utr": intent.utr, "phone": intent.phone,
+              # intent.phone is only ever set from a completed OTP verification (see pages.py)
+              "phone_verified": bool(intent.phone),
               "paid_at": intent.paid_at.isoformat() if intent.paid_at else None}
     if intent.kind == "SELF_PAY":
         return "SELF_PAY_PAID", {**common, "session_id": intent.session_id, "vehicle_class": intent.vehicle_class,

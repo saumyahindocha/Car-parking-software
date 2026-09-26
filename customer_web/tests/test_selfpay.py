@@ -60,9 +60,9 @@ def test_self_pay_with_mock_gateway_queues_correct_message(client):
     assert p["dues_paise"] == 500 and p["base_paise"] == 2000
     assert TXN_RE.match(p["txn_ref"]) and int(TXN_RE.match(p["txn_ref"]).group(1), 36) == 41
     assert p["gateway_ref"].startswith("pay_") and p["utr"] and p["paid_at"]
-    assert p["phone"] is None  # no OTP-verified number -> never sent
+    assert p["phone"] is None and p["phone_verified"] is False  # no OTP-verified number -> never sent
     assert set(p) == {"plate", "session_id", "vehicle_class", "duration_minutes", "amount_paise", "base_paise",
-                      "dues_paise", "txn_ref", "gateway_ref", "utr", "phone", "paid_at"}
+                      "dues_paise", "txn_ref", "gateway_ref", "utr", "phone", "phone_verified", "paid_at"}
     # the vehicle now shows as paid; a second self-pay is refused
     assert "Paid" in client.get("/pay").text
     assert "already paid" in client.get("/pay/s/41").text
@@ -80,7 +80,17 @@ def test_self_pay_from_masked_list_stays_masked_and_sends_verified_phone(client,
     assert "MH12••••34" in client.get(loc).text and "MH 12 AB 1234" not in client.get(loc).text
     demo_pay(client, loc)
     [m] = pull(client)["messages"]
-    assert m["payload"]["phone"] == "9876543210" and m["payload"]["amount_paise"] == 3000
+    assert m["payload"]["phone"] == "9876543210" and m["payload"]["phone_verified"] is True
+    assert m["payload"]["amount_paise"] == 3000
+
+
+def test_self_pay_uses_pushed_entry_dues(client):
+    # edge sends the dues part of the quote per entry; it wins over the (possibly stale) vehicle balance
+    push(client, [entry(41, "MH12AB1234", quotes={"120": 3000}, dues=1000)], [vehicle("MH12AB1234", balance=9900)])
+    assert "Includes previous dues of ₹10" in client.get("/pay/s/41").text
+    demo_pay(client, start(client, 41))
+    p = pull(client)["messages"][0]["payload"]
+    assert (p["amount_paise"], p["base_paise"], p["dues_paise"]) == (3000, 2000, 1000)
 
 
 def test_webhook_signature_and_idempotency(client, app):

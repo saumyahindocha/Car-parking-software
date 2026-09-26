@@ -49,18 +49,24 @@ class PaymentService {
   Future<CashResult> recordCash(PayRequest r, {String? phone, String? parkedLocation}) async {
     checkCash(r.payablePaise);
     final uuid = LocalStore.newUuid();
+    // Same receipt code online and offline: if an online request times out after
+    // the server recorded it, the queued retry (same client_uuid) and the QR the
+    // customer scanned still point at the same receipt.
+    final code = newReceiptCode();
     try {
       // Known offline: don't make the worker wait for a network timeout.
       if (!app.online) throw NetworkException('offline');
       final p = r.purpose == PayPurpose.pass
-          ? await app.api.sellPass(r.passSellBody(mode: 'CASH', phone: phone, clientUuid: uuid))
-          : await app.api.payCash(r.paymentBody(phone: phone, clientUuid: uuid, parkedLocation: parkedLocation));
+          ? await app.api.sellPass(r.passSellBody(mode: 'CASH', phone: phone, clientUuid: uuid, receiptCode: code))
+          : await app.api.payCash(
+              r.paymentBody(phone: phone, clientUuid: uuid, parkedLocation: parkedLocation, receiptCode: code),
+            );
       if (p.cash != null) {
         await app.store.putCache(CacheKeys.cash, p.cash);
       }
       await app.refreshCash();
       if (r.sessionId != null) app.collect?.markCollected(r.sessionId!);
-      return CashResult(clientUuid: uuid, payment: p);
+      return CashResult(clientUuid: uuid, payment: p, receiptCode: code);
     } on NetworkException {
       if (r.vehicleId <= 0) {
         throw CashBlocked('Selling a pass to a new plate needs the server. Try again when online.');
@@ -71,7 +77,6 @@ class PaymentService {
           'Collect the system amount, or wait until the server is reachable.',
         );
       }
-      final code = newReceiptCode();
       final item = await app.enqueue(
         SyncType.cash,
         r.syncData(phone: phone, receiptCode: code),

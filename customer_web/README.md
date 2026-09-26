@@ -32,12 +32,14 @@ All `/sync/*` calls need `X-Relay-Key` (constant-time compare; same value as the
 
 * `POST /sync/push` – upserts `entries` (by `session_id`), `vehicles` (by plate), `receipts` (by code),
   `pass_types` (missing ones deactivated), `settings` (merged). `thumb_b64: null` in delta pushes keeps
-  the stored thumbnail. `full: true` removes entries not in the list (exited/closed). The edge's pass
-  dict includes the owner's phone – the relay drops it and stores only type/dates/status.
+  the stored thumbnail; each entry's `dues_paise`/`credit_paise` (already included in its quotes) are stored.
+  `full: true` removes entries not in the list (exited/closed). Pass dicts are whitelisted to
+  type/dates/status. Pushed settings (lot_name, lot_address, receipt_footer, gstin, gst_rate_percent,
+  pass_expiry_warn_days, site_timezone, ...) are merged; the pushed `site_timezone` is used for display.
 * `GET /sync/pull?after=<cursor>` → `{"messages":[{"id","kind","payload","created_at"}],"cursor":"<seq>"}`.
-  Returns **every un-acked message**, oldest first (max 200); the cursor is informational. This is
-  deliberate: `sync_once` advances its cursor even when a message fails to apply, so a cursor-filtered
-  pull would lose it. The edge dedupes by message id (`relay_inbox`) and payments by `txn_ref`.
+  Returns **every un-acked message**, oldest first (max 200); the cursor is informational. A message
+  the edge failed to apply is simply offered again on the next pull (the edge raises a RELAY_APPLY_FAILED
+  alert and acks only applied ones). The edge dedupes by message id (`relay_inbox`) and payments by `txn_ref`.
 * `POST /sync/ack {"ids":[...]}` – marks delivered (idempotent).
 * `GET /sync/status` – last push times, pending/stuck message counts (monitoring).
 * `GET /sync/data-requests` – DPDP requests for the operator (they are also queued to the edge).
@@ -46,16 +48,18 @@ Message payloads (exactly what `apply_message` / `_apply_payment` read):
 
 | kind | payload |
 |---|---|
-| `SELF_PAY_PAID` | plate, session_id, vehicle_class, duration_minutes, amount_paise, base_paise, dues_paise, txn_ref, gateway_ref, utr, phone, paid_at |
-| `DUES_PAID` | plate, amount_paise, dues_paise, txn_ref, gateway_ref, utr, phone, paid_at |
-| `PASS_PAID` | plate, vehicle_class, pass_type_id, amount_paise, txn_ref, gateway_ref, utr, phone, paid_at |
-| `DISPUTE` | plate, claimed_paise, claimed_mode (CASH/UPI), claimed_when (ISO local time), note |
+| `SELF_PAY_PAID` | plate, session_id, vehicle_class, duration_minutes, amount_paise, base_paise, dues_paise, txn_ref, gateway_ref, utr, phone, phone_verified, paid_at |
+| `DUES_PAID` | plate, amount_paise, dues_paise, txn_ref, gateway_ref, utr, phone, phone_verified, paid_at |
+| `PASS_PAID` | plate, vehicle_class, pass_type_id, amount_paise, txn_ref, gateway_ref, utr, phone, phone_verified, paid_at |
+| `DISPUTE` | plate, claimed_paise, claimed_mode (CASH/UPI), claimed_when (ISO date-time with offset; the edge links the session covering it), note |
 | `CONTACT_VERIFIED` | plate, phone |
 | `DATA_REQUEST` | plate, phone, request_type (ACCESS/CORRECT/DELETE/WITHDRAW_CONSENT), note, requested_at |
 
 Payment messages are queued **only after the gateway confirms** (signed webhook or status poll).
-`phone` is sent only when it was verified by OTP in this browser; self-pay without OTP sends `null`.
-`base_paise`/`dues_paise` split: dues = min(amount, vehicle balance at last push).
+`phone` is sent (with `phone_verified: true`) only when it was verified by OTP in this browser; otherwise
+`phone: null, phone_verified: false`. The edge attaches a phone to the vehicle only when `phone_verified` is true.
+`base_paise`/`dues_paise` split: dues = min(amount, the entry's pushed `dues_paise`); for pushes from older
+edges without it, the vehicle balance from the last push is used.
 
 Transaction references (`tr`, ≤35 chars): self-pay `PS<session id base36>X<6 hex>` (same shape as the edge's
 `make_txn_ref("S", …)`), dues `PRD<relay intent id base36>X<6 hex>`, pass `PRP<…>X<6 hex>`. The `PR*`
@@ -137,8 +141,8 @@ pass, dispute and data request all apply on the edge.
    Razorpay account, both webhooks can be configured; each side ignores QR codes it did not create.
 4. MSG91: DLT-registered OTP template with variable `##otp##` → `RELAY_MSG91_TEMPLATE_OTP`.
 5. Edge: `PARK_RELAY_URL=https://pay.example.in`, `PARK_RELAY_API_KEY=<same key>`,
-   `PARK_PUBLIC_RECEIPT_BASE=https://pay.example.in/r` (receipt links in SMS; the edge derives the pass
-   reminder link `https://pay.example.in/pass?plate=...` from it).
+   `PARK_PUBLIC_RECEIPT_BASE=https://pay.example.in/r` (receipt links in SMS) and
+   `PARK_PUBLIC_SITE_URL=https://pay.example.in` (pass renewal links `/pass?plate=...`).
 6. Print the standee QR codes pointing at `https://pay.example.in/` (or `/pay`).
 7. Back up the relay DB daily (it holds unsynced payments only transiently; the edge is the system of record).
 

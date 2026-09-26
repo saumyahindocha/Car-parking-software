@@ -91,7 +91,7 @@ def render(request: Request, db: Optional[Session], name: str, ctx: Optional[dic
     base = {
         "request": request, "lang": lang, "langs": LANGS, "csrf": csrf_token_for(request), "csrf_field": CSRF_FIELD,
         "t": lambda key, **kw: translate(lang, key, **kw), "lot": lot, "demo": s.demo_mode, "stale": stale,
-        "rupees": rupees, "localtime": make_localtime(s.site_timezone),
+        "rupees": rupees, "localtime": make_localtime(lot.get("site_timezone") or s.site_timezone),
         "dur": lambda m: duration_label(lang, m), "authed": auth_of(request) is not None,
         "path": request.url.path,
     }

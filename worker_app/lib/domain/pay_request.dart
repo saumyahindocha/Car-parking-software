@@ -133,7 +133,12 @@ class PayRequest {
   );
 
   /// Body for `POST /api/payments/upi|cash` (SESSION / DUES).
-  Map<String, dynamic> paymentBody({String? phone, required String clientUuid, String? parkedLocation}) => {
+  Map<String, dynamic> paymentBody({
+    String? phone,
+    required String clientUuid,
+    String? parkedLocation,
+    String? receiptCode,
+  }) => {
     'purpose': purposeCode,
     if (sessionId != null) 'session_id': sessionId,
     'vehicle_id': vehicleId,
@@ -141,6 +146,7 @@ class PayRequest {
     if (passTypeId != null) 'pass_type_id': passTypeId,
     'phone': ?phone,
     'client_uuid': clientUuid,
+    'receipt_code': ?receiptCode,
     'expected_amount_paise': amountPaise,
     if (hasOverride) 'override_paise': overridePaise,
     if (hasOverride) 'override_reason': overrideReason,
@@ -150,12 +156,18 @@ class PayRequest {
 
   /// Body for `POST /api/passes/sell`.
   /// Without a known vehicle (id 0) the plate is sent and the server creates it.
-  Map<String, dynamic> passSellBody({required String mode, String? phone, required String clientUuid}) => {
+  Map<String, dynamic> passSellBody({
+    required String mode,
+    String? phone,
+    required String clientUuid,
+    String? receiptCode,
+  }) => {
     if (vehicleId > 0) 'vehicle_id': vehicleId else 'plate': target.plate,
     'pass_type_id': passTypeId,
     'mode': mode,
     'phone': ?phone,
     'client_uuid': clientUuid,
+    'receipt_code': ?receiptCode,
     'expected_amount_paise': amountPaise,
   };
 

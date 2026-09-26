@@ -22,7 +22,9 @@ def test_dues_matching_phone_sees_balance_and_history_and_pays(client, app):
     p = msgs[0]["payload"]
     assert p["plate"] == "MH12AB1234" and p["amount_paise"] == 4500 and p["dues_paise"] == 4500
     assert p["phone"] == "9876543210" and p["txn_ref"].startswith("PRD") and p["paid_at"]
-    assert set(p) == {"plate", "amount_paise", "dues_paise", "txn_ref", "gateway_ref", "utr", "phone", "paid_at"}
+    assert p["phone_verified"] is True
+    assert set(p) == {"plate", "amount_paise", "dues_paise", "txn_ref", "gateway_ref", "utr", "phone",
+                      "phone_verified", "paid_at"}
     # until the edge pushes the new balance, the page shows it as pending and offers no second payment
     r = client.get("/dues/me")
     assert "reflected shortly" in r.text and "Pay dues" not in r.text
@@ -92,8 +94,9 @@ def test_pass_purchase(client, app):
     p = msgs[0]["payload"]
     assert p["plate"] == "MH12AB1234" and p["vehicle_class"] == "BIKE" and p["pass_type_id"] == 1
     assert p["amount_paise"] == 60000 and p["txn_ref"].startswith("PRP") and p["phone"] == "9876543210"
+    assert p["phone_verified"] is True
     assert set(p) == {"plate", "vehicle_class", "pass_type_id", "amount_paise", "txn_ref", "gateway_ref", "utr",
-                      "phone", "paid_at"}
+                      "phone", "phone_verified", "paid_at"}
 
 
 def test_pass_for_unknown_vehicle_lists_all_classes(client, app):

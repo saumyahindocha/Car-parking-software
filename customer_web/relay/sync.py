@@ -56,7 +56,10 @@ def lot_settings(db: Session) -> dict[str, Any]:
             "receipt_footer": s.get("receipt_footer") or
             "Final charge is calculated on actual time; any difference is adjusted on your next visit.",
             "duration_buttons": s.get("duration_buttons") or [], "upi_vpa": s.get("upi_vpa"),
-            "upi_payee_name": s.get("upi_payee_name"), "gstin": s.get("gstin") or None}
+            "upi_payee_name": s.get("upi_payee_name"), "gstin": s.get("gstin") or None,
+            "lot_address": s.get("lot_address") or None, "gst_rate_percent": s.get("gst_rate_percent"),
+            "pass_expiry_warn_days": int(s.get("pass_expiry_warn_days") or 5),
+            "site_timezone": s.get("site_timezone")}
 
 
 def _dt(v: Optional[str]) -> Optional[datetime]:
@@ -91,6 +94,8 @@ def apply_push(db: Session, body: dict[str, Any]) -> dict[str, int]:
         row.status = e.get("status") or "OPEN"
         row.gate_id = e.get("gate_id")
         row.quotes = {str(k): int(v) for k, v in (e.get("quotes") or {}).items()}
+        row.dues_paise = int(e["dues_paise"]) if e.get("dues_paise") is not None else None
+        row.credit_paise = int(e["credit_paise"]) if e.get("credit_paise") is not None else None
         if e.get("thumb_b64"):  # delta pushes send null: keep the thumbnail we already have
             row.thumb_b64 = e["thumb_b64"]
         row.updated_at = now
@@ -115,8 +120,9 @@ def apply_push(db: Session, body: dict[str, Any]) -> dict[str, int]:
         row.phone_hash = v.get("phone_hash")
         p = v.get("pass")
         if isinstance(p, dict):
+            # whitelist: only what the pages need (defensive: never store contact data from a pass dict)
             p = {k: p.get(k) for k in ("pass_type", "pass_type_id", "vehicle_class", "starts_on", "ends_on", "status")}
-        row.pass_ = p  # the edge includes the owner's phone in pass dicts: never stored here
+        row.pass_ = p
         row.history = v.get("history") or []
         row.updated_at = now
         n_veh += 1

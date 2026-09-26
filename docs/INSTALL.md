@@ -62,7 +62,7 @@ dual NIC, online UPS, dual WAN (broadband + 4G/5G failover router).
      IN vector) — see [CAMERA_SETUP.md](CAMERA_SETUP.md).
    * Zones, users (workers, guards, supervisors with PINs).
 5. Payment gateway (Razorpay): create API keys, enable **QR Codes**, add a webhook to
-   `https://<relay-domain>/…` for the relay and — if the edge is reachable over a VPN/tunnel —
+   `https://<relay-domain>/webhooks/razorpay` for the relay and — if the edge is reachable over a VPN/tunnel —
    `https://<edge-public>/api/payments/webhook` with events `qr_code.credited`, `payment.captured`,
    `payment.failed`; put the webhook secret in `.env`. Without an inbound path to the edge, payments
    are still confirmed by status polling and the 10-minute settlement reconciliation.
@@ -138,12 +138,13 @@ Hardware: Pi 5 (4 GB) + official PSU + 64 GB high-endurance microSD, 24–32" hi
 A small VM (1 vCPU, 1 GB) with a domain, e.g. `pay.example-parking.in`, behind Caddy or NGINX
 with TLS. Details and environment variables: [customer_web/README.md](../customer_web/README.md).
 
-1. Deploy the `customer_web` container (Dockerfile provided) with `RELAY_KEY` = the edge's
-   `PARK_RELAY_API_KEY`, Razorpay keys (same merchant account as the edge) and MSG91 OTP template.
-2. Point the Razorpay webhook for self-pay at `https://pay.example-parking.in/…/webhook` (see the
-   relay README for the exact path).
+1. Deploy the `customer_web` container (Dockerfile provided) with `RELAY_RELAY_API_KEY` = the edge's
+   `PARK_RELAY_API_KEY`, Razorpay keys (same merchant account as the edge) and the MSG91 OTP template
+   (all variables: `customer_web/.env.example`).
+2. Point the Razorpay webhook for self-pay at `https://pay.example-parking.in/webhooks/razorpay`.
 3. On the edge, set `PARK_RELAY_URL=https://pay.example-parking.in` and
-   `PARK_PUBLIC_RECEIPT_BASE=https://pay.example-parking.in/r` in `deploy/.env`, then
+   `PARK_PUBLIC_RECEIPT_BASE=https://pay.example-parking.in/r`, `PARK_PUBLIC_SITE_URL=https://pay.example-parking.in`
+   in `deploy/.env`, then
    `docker compose up -d backend`. The edge pushes state every 15 s and pulls customer actions; no
    inbound port is needed at the site.
 4. Print QR standees pointing to `https://pay.example-parking.in/` (self-pay) and `/pass`.

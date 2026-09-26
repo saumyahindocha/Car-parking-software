@@ -50,6 +50,7 @@ def demo_body(now: Optional[datetime] = None) -> dict:
         entries.append({"session_id": 1000 + i, "plate": p, "masked_plate": mask(p), "vehicle_class": "BIKE",
                         "entry_at": (now - timedelta(minutes=10 + i * rng.randint(9, 25))).isoformat(),
                         "status": "PREPAID" if i == 3 else "OPEN", "gate_id": "G1",
+                        "dues_paise": dues, "credit_paise": 0,
                         "quotes": {"120": 1000 + dues, "240": 2000 + dues, "480": 3000 + dues, "720": 3000 + dues,
                                    "1440": 6000 + dues},
                         "thumb_b64": thumb(p)})
@@ -84,7 +85,8 @@ def demo_body(now: Optional[datetime] = None) -> dict:
                          "receipt_footer": "Final charge is calculated on actual time; any difference is adjusted "
                                            "on your next visit.",
                          "duration_buttons": [120, 240, 480, 720, 1440], "upi_vpa": "parking@upi",
-                         "upi_payee_name": "Station Parking", "gstin": ""}}
+                         "upi_payee_name": "Station Parking", "gstin": "", "lot_address": "Station Road",
+                         "gst_rate_percent": 0, "pass_expiry_warn_days": 5, "site_timezone": "Asia/Kolkata"}}
 
 
 def main() -> None:

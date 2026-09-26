@@ -96,6 +96,7 @@ void main() {
         passTypeId: 3,
       );
       expect(p.passSellBody(mode: 'UPI', clientUuid: 'u')['expected_amount_paise'], 51500);
+      expect(p.passSellBody(mode: 'CASH', clientUuid: 'u', receiptCode: 'Ab3dEf7h')['receipt_code'], 'Ab3dEf7h');
     });
 
     test('offline CASH carries the phone-made receipt code', () {
@@ -110,6 +111,10 @@ void main() {
       );
       expect(r.syncData(receiptCode: 'Ab3dEf7h')['receipt_code'], 'Ab3dEf7h');
       expect(r.syncData().containsKey('receipt_code'), isFalse);
+      final online = r.paymentBody(clientUuid: 'u1', receiptCode: 'Ab3dEf7h');
+      expect(online['receipt_code'], 'Ab3dEf7h');
+      expect(online['client_uuid'], 'u1');
+      expect(r.paymentBody(clientUuid: 'u1').containsKey('receipt_code'), isFalse);
     });
 
     test('new sync type names match the backend', () {

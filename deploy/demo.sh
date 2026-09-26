@@ -40,6 +40,7 @@ for i in $(seq 1 30); do curl -fs "http://localhost:$PORT/api/health" >/dev/null
 
 if [[ $RELAY == 1 ]]; then
   echo "==> Customer relay on http://localhost:8080"
+  rm -f "$WORK/relay.db"   # the relay creates its tables at start-up
   (cd "$ROOT/customer_web" && RELAY_DATABASE_URL="sqlite:///$WORK/relay.db" RELAY_RELAY_API_KEY="demo-relay-key" \
       RELAY_SECRET_KEY="demo-secret" RELAY_DEMO_MODE=true RELAY_COOKIE_SECURE=false RELAY_PUBLIC_BASE_URL="http://localhost:8080" \
       RELAY_GATEWAY=mock RELAY_SMS_PROVIDER=noop exec python3 -m uvicorn relay.main:app --port 8080 --log-level warning) &
