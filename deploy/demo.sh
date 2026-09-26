@@ -33,6 +33,10 @@ if [[ ! -f "$stamp" ]]; then
   python3 -m pip install --progress-bar on -r "${reqs[0]}" -r "${reqs[1]}" qrcode
   touch "$stamp"
 fi
+if [[ $PHONE == 1 ]] && ! python3 -c "import qrcode" 2>/dev/null; then
+  say "Installing the QR code printer"
+  python3 -m pip install -q qrcode
+fi
 
 # ---------------------------------------------------------------- ready-made apps (built on GitHub)
 remote="$(git -C "$ROOT" config --get remote.origin.url 2>/dev/null || true)"
@@ -87,14 +91,28 @@ if [[ $PHONE == 1 ]]; then
     curl -fL --progress-bar "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$arch" -o "$cf"
     chmod +x "$cf"
   fi
-  say "Opening a secure public link to this demo"
+  say "Opening a secure public link to this demo (Cloudflare)"
   "$cf" tunnel --no-autoupdate --url "http://localhost:$PORT" >"$WORK/tunnel.log" 2>&1 &
   pids+=($!)
   for i in $(seq 1 40); do
     PUBLIC=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$WORK/tunnel.log" | head -1 || true)
     [[ -n "$PUBLIC" ]] && break; sleep 1
   done
-  [[ -n "$PUBLIC" ]] || echo "   could not open the public link (see $WORK/tunnel.log); the laptop links still work"
+  if [[ -z "$PUBLIC" ]] && command -v ssh >/dev/null; then
+    say "Cloudflare did not answer; trying the backup link service (localhost.run)"
+    ssh -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 -o ExitOnForwardFailure=yes \
+        -R "80:localhost:$PORT" nokey@localhost.run >"$WORK/tunnel2.log" 2>&1 </dev/null &
+    pids+=($!)
+    for i in $(seq 1 30); do
+      PUBLIC=$(grep -oE 'https://[a-z0-9.-]+\.(lhr\.life|localhost\.run)' "$WORK/tunnel2.log" | grep -v 'admin.localhost.run' | head -1 || true)
+      [[ -n "$PUBLIC" ]] && break; sleep 1
+    done
+  fi
+  if [[ -z "$PUBLIC" ]]; then
+    echo
+    echo "  !! Could not open a public link for phones (details: $WORK/tunnel.log)."
+    echo "     The demo still works on this laptop. Send the last lines of that file for help."
+  fi
 fi
 
 # ---------------------------------------------------------------- optional extras
@@ -129,8 +147,9 @@ if [[ -n "$PUBLIC" ]]; then
   echo
   echo "    Phone app (any phone, scan this QR or open the link):"
   echo "    $PUBLIC/app"
-  python3 -c "import qrcode,sys; q=qrcode.QRCode(border=1); q.add_data(sys.argv[1]); q.print_ascii(invert=True)" "$PUBLIC/app" 2>/dev/null \
-    | sed 's/^/    /' || true
+  if ! python3 -c "import qrcode,sys; q=qrcode.QRCode(border=2); q.add_data(sys.argv[1]); q.print_ascii(invert=True)" "$PUBLIC/app"; then
+    echo "    (could not draw the QR code: type the link above into the phone's browser instead)"
+  fi
   echo "    iPhone: open in Safari → Share → Add to Home Screen for a full-screen app."
   echo "    Dashboard from anywhere: $PUBLIC  (anyone with the link can see the demo while it runs)"
 fi
