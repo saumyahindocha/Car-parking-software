@@ -17,12 +17,25 @@ pids=()
 cleanup() { echo; echo "stopping demo"; for p in "${pids[@]}"; do kill "$p" 2>/dev/null || true; done; wait 2>/dev/null; }
 trap cleanup EXIT INT TERM
 
-echo "==> Python dependencies"
-python3 -m pip install -q -r "$ROOT/backend/requirements.txt" -r "$ROOT/anpr/requirements.txt" 2>/dev/null || true
+# Python packages: installed once (about 100 MB on the first run), skipped afterwards
+stamp="$WORK/.deps-$(cat "$ROOT/backend/requirements.txt" "$ROOT/anpr/requirements.txt" | md5sum | cut -c1-12)"
+if [[ ! -f "$stamp" ]]; then
+  echo "==> Installing Python packages (first run only; a few minutes on a slow connection)"
+  python3 -m pip install --progress-bar on -r "$ROOT/backend/requirements.txt" -r "$ROOT/anpr/requirements.txt"
+  touch "$stamp"
+else
+  echo "==> Python packages already installed"
+fi
 
-if command -v npm >/dev/null && [[ ! -f "$ROOT/dashboard/dist/index.html" ]]; then
-  echo "==> Building dashboard"
-  (cd "$ROOT/dashboard" && npm ci --no-audit --no-fund && npm run build)
+if [[ ! -f "$ROOT/dashboard/dist/index.html" ]]; then
+  if command -v npm >/dev/null; then
+    echo "==> Building the dashboard (first run only; downloads ~120 MB of npm packages)"
+    (cd "$ROOT/dashboard" && npm ci --no-audit --no-fund --loglevel=http && npm run build)
+  else
+    echo "!! npm not found: the API will run but the dashboard page will not load (install Node.js 20+)"
+  fi
+else
+  echo "==> Dashboard already built"
 fi
 
 export PARK_DATABASE_URL="sqlite:///$WORK/demo.db" PARK_DEMO_MODE=true PARK_GATEWAY=mock \
