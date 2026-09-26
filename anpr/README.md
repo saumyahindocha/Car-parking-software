@@ -45,15 +45,18 @@ anpr/
 cd anpr
 pip install -r requirements-dev.txt
 
-# 1. Render synthetic gate videos (2 gates × L/R ANPR + overview, 1280x720) + ground truth
-python -m anpr_service synth --out demo            # --full-res for 2560x1440
+# 1. Render synthetic gate videos + ground truth: G1 = entry (IN), G2 = exit (OUT) with the
+#    same plates leaving 8 s later (L/R ANPR + overview per gate, 1280x720)
+python -m anpr_service synth --out demo            # --full-res, --wrong-way, --exit-delay 8
 
 # 2. Replay them through the full multi-process service (classical recogniser).
 #    Without BACKEND_URL the events go to demo/events.jsonl; the images go to demo/images/.
 python -m anpr_service replay --config demo/site.synth.yaml            # as fast as possible
 python -m anpr_service replay --config demo/site.synth.yaml --realtime # paced like live cameras
-BACKEND_URL=http://localhost:8000 ANPR_API_KEY=dev-key \
-  python -m anpr_service replay --config demo/site.synth.yaml         # post to the backend
+BACKEND_URL=http://localhost:8000 ANPR_API_KEY=dev-anpr-key \
+  python -m anpr_service replay --config demo/site.synth.yaml --realtime  # post to the backend
+# With BACKEND_URL set, gate directions come from GET /api/anpr/config (schedules);
+# camera geometry stays from the YAML (backend.geometry: prefer_local).
 
 # 3. Accuracy report (per-camera exact / approximate / read rate, side-by-side subset)
 python -m anpr_service evaluate --labels demo

@@ -44,6 +44,14 @@ def session_json(db: Session, s: ParkingSession, with_images: bool = True) -> di
     return d
 
 
+def _last_plate_image(db: Session, vehicle_id: int) -> Optional[str]:
+    for imgs in db.scalars(select(AnprEvent.images).where(AnprEvent.vehicle_id == vehicle_id)
+                           .order_by(AnprEvent.ts.desc()).limit(5)):
+        if (imgs or {}).get("plate_crop"):
+            return image_url(imgs["plate_crop"])
+    return None
+
+
 def vehicle_json(db: Session, v: Vehicle, *, detail: bool = False) -> dict:
     now = utcnow()
     p = active_pass(db, v.id, now)
@@ -52,7 +60,8 @@ def vehicle_json(db: Session, v: Vehicle, *, detail: bool = False) -> dict:
          "first_seen": iso(v.first_seen), "last_seen": iso(v.last_seen), "phone": v.phone, "name": v.name,
          "notes": v.notes, "balance_paise": v.balance_paise, "pending_claims_paise": pending_claims_paise(db, v.id),
          "pass": {"id": p.id, "ends_at": iso(p.ends_at), "starts_at": iso(p.starts_at)} if p else None,
-         "open_session": session_json(db, open_s) if open_s else None}
+         "open_session": session_json(db, open_s) if open_s else None,
+         "last_plate_image": _last_plate_image(db, v.id)}
     if detail:
         from ..domain.passes import is_pass_candidate, pass_dict
 

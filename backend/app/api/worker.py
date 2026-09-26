@@ -202,6 +202,21 @@ def claim(payment_id: int, db: Session = Depends(get_db), user: User = Depends(c
     return payments.payment_dict(db, p)
 
 
+class CancelIn(BaseModel):
+    reason: Optional[str] = None
+
+
+@router.post("/payments/{payment_id}/cancel")
+def cancel(payment_id: int, body: CancelIn, db: Session = Depends(get_db), user: User = Depends(collector)):
+    """Abandon an unpaid UPI QR (customer switched to cash or left)."""
+    p = db.get(Payment, payment_id)
+    if p is None or p.mode != "UPI":
+        raise HTTPException(404, "UPI payment not found")
+    payments.cancel_payment(db, p, user, body.reason or "cancelled by worker")
+    db.commit()
+    return payments.payment_dict(db, p)
+
+
 # ------------------------------------------------------------------ receipts
 class SendIn(BaseModel):
     phone: str
@@ -297,6 +312,7 @@ class PassSellIn(BaseModel):
     mode: str = "UPI"
     phone: Optional[str] = None
     client_uuid: Optional[str] = None
+    expected_amount_paise: Optional[int] = None
 
 
 @router.post("/passes/sell")
@@ -310,7 +326,8 @@ def pass_sell(body: PassSellIn, db: Session = Depends(get_db), user: User = Depe
 
         pt = db.get(PassType, body.pass_type_id)
         vid = sess_svc.get_or_create_vehicle(db, norm.plate, pt.vehicle_class, utcnow()).id
-    pay = PayIn(purpose="PASS", vehicle_id=vid, pass_type_id=body.pass_type_id, phone=body.phone, client_uuid=body.client_uuid)
+    pay = PayIn(purpose="PASS", vehicle_id=vid, pass_type_id=body.pass_type_id, phone=body.phone, client_uuid=body.client_uuid,
+                expected_amount_paise=body.expected_amount_paise)
     return pay_cash(pay, db, user) if body.mode == "CASH" else pay_upi(pay, db, user)
 
 
@@ -390,7 +407,9 @@ def alert_ack(alert_id: int, body: AckIn, db: Session = Depends(get_db), user: U
 
 # ------------------------------------------------------------------ offline sync (idempotent batch)
 class SyncItem(BaseModel):
-    type: str  # CASH | UPI_CLAIM | DISPUTE | HANDOVER | RECEIPT_SHOWN | CONTACT
+    # CASH | UPI_CLAIM | DISPUTE | HANDOVER | RECEIPT_SHOWN | CONTACT | ALERT_ACK | PLATE_CORRECTION
+    # | SHIFT_OPEN | SHIFT_CLOSE
+    type: str
     client_uuid: str
     created_at: datetime
     data: dict[str, Any] = Field(default_factory=dict)
@@ -398,6 +417,17 @@ class SyncItem(BaseModel):
 
 class SyncIn(BaseModel):
     items: list[SyncItem]
+
+
+def _record_sync_failure(db: Session, user: User, it: SyncItem, err: str) -> None:
+    """Failed offline items become a supervisor alert (once per client_uuid) so they are seen centrally."""
+    seen = db.scalars(select(Alert).where(Alert.kind == "SYNC_FAILED", Alert.event_id == it.client_uuid)).first()
+    if seen is None:
+        db.add(Alert(kind="SYNC_FAILED", severity="WARN", event_id=it.client_uuid,
+                     message=f"{user.name}: offline {it.type} could not be applied: {err}",
+                     data={"user_id": user.id, "type": it.type, "created_at": it.created_at.isoformat(),
+                           "data": {k: v for k, v in it.data.items() if k != "phone"}, "error": err}))
+        db.commit()
 
 
 @router.post("/sync")
@@ -413,15 +443,16 @@ def offline_sync(body: SyncIn, db: Session = Depends(get_db), user: User = Depen
                 q, purpose, pass_id = payments._offline_quote(
                     db, sess_id, d.get("vehicle_id"), d.get("duration_minutes"), int(d.get("dues_paise", 0)),
                     int(d["amount_paise"]), pass_type_id, user, it.created_at)
-                p = payments.record_cash(db, q, user=user, purpose=purpose, pass_id=pass_id, phone=d.get("phone"),
-                                         client_uuid=it.client_uuid, client_created_at=it.created_at, offline_sync=True)
+                p = payments.record_cash(db, q, user=user, purpose=purpose, pass_id=pass_id, phone=_phone(d.get("phone")),
+                                         client_uuid=it.client_uuid, client_created_at=it.created_at, offline_sync=True,
+                                         receipt_code=d.get("receipt_code"))
                 results.append({"client_uuid": it.client_uuid, "ok": True, "payment": payments.payment_dict(db, p)})
             elif it.type == "UPI_CLAIM":
                 p = payments.record_offline_claim(
                     db, user=user, client_uuid=it.client_uuid, amount_paise=int(d["amount_paise"]), txn_ref=d["txn_ref"],
                     client_created_at=it.created_at, session_id=d.get("session_id"), vehicle_id=d.get("vehicle_id"),
                     duration_minutes=d.get("duration_minutes"), dues_paise=int(d.get("dues_paise", 0)),
-                    phone=d.get("phone"), pass_type_id=d.get("pass_type_id"))
+                    phone=_phone(d.get("phone")), pass_type_id=d.get("pass_type_id"))
                 results.append({"client_uuid": it.client_uuid, "ok": True, "payment": payments.payment_dict(db, p)})
             elif it.type == "DISPUTE":
                 dd = disputes.raise_dispute(db, vehicle_id=d["vehicle_id"], session_id=d.get("session_id"),
@@ -441,10 +472,26 @@ def offline_sync(body: SyncIn, db: Session = Depends(get_db), user: User = Depen
                 v = db.get(Vehicle, d["vehicle_id"])
                 v.phone = _phone(d["phone"])
                 results.append({"client_uuid": it.client_uuid, "ok": True})
+            elif it.type == "ALERT_ACK":
+                a = db.get(Alert, d["alert_id"])
+                if a is not None and a.acknowledged_at is None:
+                    a.acknowledged_by, a.acknowledged_at, a.note = user.id, it.created_at, d.get("note")
+                results.append({"client_uuid": it.client_uuid, "ok": True})
+            elif it.type == "PLATE_CORRECTION":
+                sess_svc.correct_session_plate(db, d["session_id"], d["plate"], user_id=user.id)
+                results.append({"client_uuid": it.client_uuid, "ok": True})
+            elif it.type == "SHIFT_OPEN":
+                sh = cash.current_shift(db, user.id) or cash.open_shift(db, user, zone_id=d.get("zone_id"), at=it.created_at)
+                results.append({"client_uuid": it.client_uuid, "ok": True, "shift_id": sh.id})
+            elif it.type == "SHIFT_CLOSE":
+                sh = cash.close_shift(db, user, note=d.get("note"), at=it.created_at)
+                results.append({"client_uuid": it.client_uuid, "ok": True, "shift_id": sh.id})
             else:
                 results.append({"client_uuid": it.client_uuid, "ok": False, "error": f"unknown type {it.type}"})
             db.commit()
         except (ValueError, LookupError, PermissionError, KeyError, HTTPException) as e:
             db.rollback()
-            results.append({"client_uuid": it.client_uuid, "ok": False, "error": str(getattr(e, "detail", e))})
+            err = str(getattr(e, "detail", e))
+            results.append({"client_uuid": it.client_uuid, "ok": False, "error": err})
+            _record_sync_failure(db, user, it, err)
     return {"results": results, "cash": cash.holding_dict(db, user.id) if user.role != Role.GUARD else None}

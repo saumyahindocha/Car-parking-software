@@ -241,10 +241,28 @@ def relay_auth(request: Request, x_relay_key: Optional[str] = Header(None)) -> N
 
 
 @router.post("/push", dependencies=[Depends(relay_auth)])
-def push(body: dict[str, Any], db: Session = Depends(get_db)):
+def push(body: dict[str, Any], request: Request, db: Session = Depends(get_db)):
     counts = apply_push(db, body)
     db.commit()
+    last = kv_get(db, "last_housekeeping_at")
+    if not last or utcnow() - datetime.fromisoformat(last) > timedelta(hours=1):
+        run_housekeeping(db, settings_of(request).phone_retention_days)
+        kv_set(db, "last_housekeeping_at", utcnow().isoformat())
+        db.commit()
     return {"ok": True, **counts}
+
+
+def run_housekeeping(db: Session, phone_retention_days: int) -> None:
+    """Expired OTPs, old rate-limit rows, phone numbers on old payment intents, old acked messages."""
+    from . import otp as otp_svc
+    from .payments import purge_phones
+    from .security import purge_rate_events
+
+    otp_svc.purge(db)
+    purge_rate_events(db)
+    purge_phones(db, phone_retention_days)
+    db.execute(delete(Outbox).where(Outbox.acked_at.is_not(None), Outbox.kind != "DATA_REQUEST",
+                                    Outbox.acked_at < utcnow() - timedelta(days=phone_retention_days)))
 
 
 @router.get("/pull", dependencies=[Depends(relay_auth)])

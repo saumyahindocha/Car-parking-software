@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
+from .db import utcnow
 from .i18n import LANGS, translate
 from .security import CSRF_FIELD, csrf_token_for, sign, unsign
 from .sync import kv_get, lot_settings
@@ -86,11 +87,7 @@ def render(request: Request, db: Optional[Session], name: str, ctx: Optional[dic
     stale = False
     if db is not None:
         lp = kv_get(db, "last_push_at")
-        if lp:
-            age = (datetime.now(datetime.fromisoformat(lp).tzinfo) - datetime.fromisoformat(lp)).total_seconds()
-            stale = age > s.stale_push_warn_s
-        else:
-            stale = True
+        stale = not lp or (utcnow() - datetime.fromisoformat(lp)).total_seconds() > s.stale_push_warn_s
     base = {
         "request": request, "lang": lang, "langs": LANGS, "csrf": csrf_token_for(request), "csrf_field": CSRF_FIELD,
         "t": lambda key, **kw: translate(lang, key, **kw), "lot": lot, "demo": s.demo_mode, "stale": stale,

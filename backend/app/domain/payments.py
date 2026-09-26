@@ -255,7 +255,14 @@ def record_offline_claim(db: Session, *, user: User, client_uuid: str, amount_pa
     existing = db.scalars(select(Payment).where(Payment.client_uuid == client_uuid)).first()
     if existing is not None:
         return existing
-    if db.scalars(select(Payment).where(Payment.txn_ref == txn_ref)).first() is not None:
+    same_ref = db.scalars(select(Payment).where(Payment.txn_ref == txn_ref)).first()
+    if same_ref is not None:
+        if same_ref.status == PayStatus.INITIATED and same_ref.offline and same_ref.amount_paise == amount_paise:
+            # the server created this offline QR, then the phone lost the server: claim that payment
+            same_ref.client_uuid = client_uuid
+            return claim_offline(db, same_ref, user)
+        if same_ref.status in (PayStatus.CLAIMED_OFFLINE, PayStatus.CONFIRMED):
+            return same_ref
         txn_ref = f"{txn_ref}-{secrets.token_hex(2).upper()}"
     q, purpose, pass_id = _offline_quote(db, session_id, vehicle_id, duration_minutes, dues_paise, amount_paise, pass_type_id,
                                          user, client_created_at)
@@ -311,7 +318,8 @@ def _after_claim(db: Session, p: Payment) -> None:
 
 
 def confirm_payment(db: Session, p: Payment, *, gateway_ref: Optional[str] = None, utr: Optional[str] = None,
-                    amount_paise: Optional[int] = None, at: Optional[datetime] = None, note: Optional[str] = None) -> Payment:
+                    amount_paise: Optional[int] = None, at: Optional[datetime] = None, note: Optional[str] = None,
+                    receipt_code: Optional[str] = None) -> Payment:
     """Idempotently move a payment to CONFIRMED, post the ledger PAYMENT and issue the receipt."""
     if p.status == PayStatus.CONFIRMED:
         return p
@@ -340,7 +348,27 @@ def confirm_payment(db: Session, p: Payment, *, gateway_ref: Optional[str] = Non
             sess.status = SessionStatus.SETTLED
     from .receipts import issue_receipt
 
-    issue_receipt(db, p)
+    issue_receipt(db, p, code=receipt_code)
+    db.flush()
+    events.emit(db, "payment.updated", payment_dict(db, p))
+    return p
+
+
+def cancel_payment(db: Session, p: Payment, user: User, reason: str = "cancelled by worker") -> Payment:
+    """Abandon a UPI payment that was never paid (customer switched to cash or left)."""
+    if p.status != PayStatus.INITIATED:
+        raise PaymentError(f"cannot cancel a {p.status} payment")
+    if user.role not in (Role.SUPERVISOR, Role.ADMIN) and p.collected_by != user.id:
+        raise PermissionError("only the collecting worker or a supervisor can cancel")
+    if p.gateway_order_id and not p.offline:
+        try:  # a late payment on the QR would still be confirmed by webhook/reconciliation
+            st = get_gateway().fetch_status(p.gateway_order_id, p.txn_ref)
+            if st.status == "PAID":
+                return confirm_payment(db, p, gateway_ref=st.gateway_ref, utr=st.utr, amount_paise=st.amount_paise)
+        except GatewayUnavailable:
+            pass
+    p.status = PayStatus.FAILED
+    p.status_note = reason
     db.flush()
     events.emit(db, "payment.updated", payment_dict(db, p))
     return p
@@ -404,7 +432,7 @@ def record_cash(db: Session, q: Quote, *, user: User, purpose: str = "SESSION", 
                 phone: Optional[str] = None, override_paise: Optional[int] = None, override_reason: Optional[str] = None,
                 supervisor_pin: Optional[str] = None, client_uuid: Optional[str] = None,
                 client_created_at: Optional[datetime] = None, offline_sync: bool = False,
-                parked_location: Optional[str] = None) -> Payment:
+                parked_location: Optional[str] = None, receipt_code: Optional[str] = None) -> Payment:
     """Worker confirms 'Cash received ₹X' for the system-calculated amount."""
     if client_uuid:
         existing = db.scalars(select(Payment).where(Payment.client_uuid == client_uuid)).first()
@@ -427,7 +455,7 @@ def record_cash(db: Session, q: Quote, *, user: User, purpose: str = "SESSION", 
     p.limit_breach = breach
     if client_created_at:
         p.created_at = client_created_at
-    confirm_payment(db, p, at=at)
+    confirm_payment(db, p, at=at, receipt_code=receipt_code)
     events.emit(db, "cash.updated", cash.holding_dict(db, user.id))
     return p
 

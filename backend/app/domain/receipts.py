@@ -18,15 +18,22 @@ def _code() -> str:
     return "".join(secrets.choice(_ALPHABET) for _ in range(8))
 
 
-def issue_receipt(db: Session, p: Payment) -> Receipt:
+def valid_client_code(code: str | None) -> bool:
+    return bool(code) and len(code) == 8 and all(c in _ALPHABET for c in code)
+
+
+def issue_receipt(db: Session, p: Payment, code: str | None = None) -> Receipt:
+    """Issue the receipt. `code` may be supplied by a phone that printed the receipt QR while offline;
+    it is used if well-formed and unused, so the link the customer scanned works after sync."""
     if p.receipt_id:
         return db.get(Receipt, p.receipt_id)
     veh = db.get(Vehicle, p.vehicle_id)
     sess = db.get(ParkingSession, p.session_id) if p.session_id else None
     tz = site_tz()
-    code = _code()
-    while db.query(Receipt.id).filter(Receipt.code == code).first():
+    if not valid_client_code(code) or db.query(Receipt.id).filter(Receipt.code == code).first():
         code = _code()
+        while db.query(Receipt.id).filter(Receipt.code == code).first():
+            code = _code()
     at = (p.confirmed_at or p.created_at).astimezone(tz)
     number = f"R{at:%y%m%d}-{p.id:07d}"
     link = f"{get_settings().public_receipt_base.rstrip('/')}/{code}"

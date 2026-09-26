@@ -189,6 +189,8 @@ def bootstrap(db: Session = Depends(get_db), user: User = Depends(current_user))
         "zone": {"id": zone.id, "name": zone.name, "until": iso(za.ends_at)} if zone else None,
         "zones": [{"id": z.id, "name": z.name, "gate_id": z.gate_id} for z in db.scalars(select(Zone)).all()],
         "server_time": now.isoformat(),
+        "site_timezone": get_settings().site_timezone,
+        "public_receipt_base": get_settings().public_receipt_base.rstrip("/"),
         "settings": {k: st[k] for k in ("lot_name", "upi_vpa", "upi_payee_name", "cash_enabled", "cash_desk_only",
                                         "cash_desk_user_ids", "cash_limit_paise", "cash_warn_ratio", "duration_buttons",
                                         "approx_tolerance", "state_codes", "to_collect_hours", "receipt_footer",

@@ -12,16 +12,15 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import otp as otp_svc
 from . import payments as pay
 from .config import Settings, get_settings
 from .db import Base, make_engine, make_sessionmaker
 from .gateway import PaymentGateway, make_gateway
 from .i18n import LANGS, pick_lang
 from .pages import router as pages_router
-from .security import CSRF_COOKIE, csrf_token_for, purge_rate_events
+from .security import CSRF_COOKIE, csrf_token_for
 from .sms import SmsSender, make_sms
-from .sync import deliver_direct_and_record, kv_get
+from .sync import deliver_direct_and_record, kv_get, run_housekeeping
 from .sync import router as sync_router
 
 log = logging.getLogger("relay")
@@ -33,9 +32,7 @@ CSP = ("default-src 'self'; img-src 'self' data: https://*.razorpay.com https://
 def housekeeping(app: FastAPI) -> None:
     db = app.state.sessionmaker()
     try:
-        otp_svc.purge(db)
-        purge_rate_events(db)
-        pay.purge_phones(db, app.state.settings.phone_retention_days)
+        run_housekeeping(db, app.state.settings.phone_retention_days)
         db.commit()
     finally:
         db.close()

@@ -113,3 +113,36 @@ def test_websocket_exit_to_alert_unit(client):
         anpr(c, "OUT", "MH12ZZ0001", "G2")
         msg = ws.receive_json()
         assert msg["topic"] == "exit" and msg["data"]["state"] == "RED" and msg["data"]["plate"] == "MH12ZZ0001"
+
+
+def test_sync_extensions_cancel_and_claim_existing(client, gateway):
+    c = client
+    w = login(c, "w3", pin="3333")
+    anpr(c, "IN", "KA01AB0002", "G1")
+    sid = c.get("/api/collect/list", headers=w).json()[0]["session_id"]
+    # UPI QR abandoned -> cancel
+    p = c.post("/api/payments/upi", json={"session_id": sid, "duration_minutes": 120}, headers=w).json()
+    assert c.post(f"/api/payments/{p['id']}/cancel", json={}, headers=w).json()["status"] == "FAILED"
+    # gateway down: server makes an offline QR, phone then loses the server and syncs the claim
+    gateway.online = False
+    p2 = c.post("/api/payments/upi", json={"session_id": sid, "duration_minutes": 120}, headers=w).json()
+    assert p2["offline"]
+    items = [{"type": "UPI_CLAIM", "client_uuid": "c-9", "created_at": "2026-09-26T10:00:00+05:30",
+              "data": {"session_id": sid, "duration_minutes": 120, "amount_paise": 1000, "txn_ref": p2["txn_ref"]}},
+             {"type": "SHIFT_OPEN", "client_uuid": "s-1", "created_at": "2026-09-26T09:00:00+05:30", "data": {}},
+             {"type": "CASH", "client_uuid": "bad-1", "created_at": "2026-09-26T10:01:00+05:30",
+              "data": {"session_id": 999999, "duration_minutes": 120, "amount_paise": 1000}}]
+    res = c.post("/api/sync", json={"items": items}, headers=w).json()["results"]
+    assert res[0]["ok"] and res[0]["payment"]["id"] == p2["id"] and res[0]["payment"]["status"] == "CLAIMED_OFFLINE"
+    assert res[1]["ok"] and not res[2]["ok"]
+    sup = login(c, "sup1", password="super123")
+    assert any(a["kind"] == "SYNC_FAILED" for a in c.get("/api/alerts?kind=SYNC_FAILED", headers=sup).json())
+    # offline cash with a phone-generated receipt code
+    anpr(c, "IN", "KA01AB0003", "G1")
+    sid2 = [x for x in c.get("/api/collect/list", headers=w).json() if x["plate"] == "KA01AB0003"][0]["session_id"]
+    res = c.post("/api/sync", json={"items": [{"type": "CASH", "client_uuid": "c-10", "created_at": "2026-09-26T10:05:00+05:30",
+                 "data": {"session_id": sid2, "duration_minutes": 120, "amount_paise": 1000, "receipt_code": "abcd2345",
+                          "phone": "+91 98765-43210"}}]}, headers=w).json()["results"]
+    assert res[0]["payment"]["receipt"]["code"] == "abcd2345"
+    assert c.get("/api/public/receipts/abcd2345").status_code == 200
+    assert c.get("/api/bootstrap", headers=w).json()["site_timezone"] == "Asia/Kolkata"

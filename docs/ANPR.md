@@ -104,10 +104,12 @@ clock) to the event being queued. Per-stage timings (`detect`, `track`,
 `plates`, `ocr`, `finalize`: mean, p95, max) are logged every 60 s per camera.
 They are also returned by `replay --inline` and `evaluate`.
 
-Measured on a 4-core CI container (no GPU) with the classical engine at
-1280×720, 25 fps, and 6 camera processes: realtime replay latency was
-0.37–1.5 s, including CPU contention. The classical engine costs about
-8–12 ms per frame per camera.
+Measured with the classical engine on a 4-core container (no GPU), running 6 camera
+processes at 1280×720 and 25 fps with `merge_hold_s` = 0.5 s. This was a realtime replay of the
+two-gate synthetic demo, posting to the real backend: 19 events, min 222 ms, median 527 ms,
+p95 818 ms, max 838 ms. Events seen by both cameras go out at about 0.22–0.29 s. Single-camera
+events wait for the hold, at about 0.53–0.84 s. The classical engine costs about 8–12 ms per frame
+per camera.
 
 ## 2. The recognition engine interface
 
@@ -178,8 +180,23 @@ READ.
 
 Config refresh: `GET {BACKEND}/api/anpr/config` with `X-Device-Key` returns
 `{"gates":[{"id","name","direction","cameras":[{"id","role","rtsp_url","roi","capture_line","in_vector"}]}],"settings":{...}}`.
-Remote values override the YAML for those fields. Local-only fields such as
-`gate_span`, `gstreamer_pipeline` and `replay_file` are kept.
+It is fetched **at start-up, in live `run` and in `replay`** whenever `backend.url` is set, and then
+every `config_refresh_s`. Precedence:
+
+* **Gate `direction` always comes from the backend** when it answers, because the backend resolves
+  time-of-day schedules. The YAML value is only a fallback when the backend is unreachable.
+* The backend also supplies `merge_window_s`, `dedupe_window_s`, `min_confidence` and `state_codes`,
+  plus the camera `rtsp_url`, `role`, `side` and `enabled` fields.
+* **Camera geometry** (`roi`, `capture_line`, `in_vector`, taken as one unit) follows
+  `backend.geometry`:
+  * `prefer_local` (the default): the YAML wins whenever the YAML camera defines a `capture_line`. The
+    backend's geometry is used only for cameras that have none locally. This keeps synthetic/replay
+    configs and on-site calibrated YAML correct even though the seeded backend cameras carry
+    placeholder pixel geometry.
+  * `prefer_backend`: non-empty backend geometry wins, for geometry edited in the admin UI.
+* Local-only fields are always kept: `gate_span`, `gstreamer_pipeline` and `replay_file`.
+* During `replay`, camera changes from the backend never restart a worker, because that would rewind
+  its video.
 
 ## 4. Configuration reference (`anpr/config/site.example.yaml`)
 
@@ -193,6 +210,7 @@ environment variables `BACKEND_URL`, `ANPR_API_KEY`, `IMAGE_ROOT` and
 | `outbox_path` | `/data/anpr/outbox.sqlite` | Durable outbox (WAL) |
 | `backend.url` / `api_key` | – | Empty URL means no posting (use `emitter.events_jsonl`) |
 | `backend.config_refresh_s` | 30 | Config poll period |
+| `backend.geometry` | `prefer_local` | Owner of camera roi/capture_line/in_vector (see §3) |
 | `recognizer.kind` | `classical` | `classical` / `onnx` / `commercial` |
 | `recognizer.onnx.*` | see file | model paths, `detector_format`, `detector_classes`, OCR input size, alphabet, blank index, providers |
 | `recognizer.commercial.*` | see file | `api_url`, `api_key_env`, `regions: [in]`, `min_interval_s` |
@@ -229,6 +247,14 @@ format is the one written by `synth`. For real clips, list the plate,
 exact-match accuracy, approximate-match rate (confusion-aware, Levenshtein
 ≤ 1), read rate, the side-by-side subset, missed vehicles, extra
 (duplicate/false) events, and UNREAD handling of unreadable plates.
+
+`synth` renders a coherent site. The first gate (G1) is the entry gate: direction IN,
+`in_vector [0,-1]`. The other gates (G2) are exit gates: direction OUT, `in_vector [0,1]`, because
+the same rear view now shows leaving bikes riding away. **The same plates leave through G2
+`--exit-delay` seconds (default 8) after entering through G1**, so the backend opens and closes a
+session for each vehicle. `--wrong-way` adds one rider going the wrong way through the entry gate.
+Against the real backend (seeded G1 = IN, G2 = OUT), the demo gives 8 sessions opened and closed,
+16 MATCHED events, 2 UNREAD and 1 WRONG_WAY.
 
 Result on the bundled synthetic scenes (2 gates, 9 vehicles each: a
 side-by-side pair, a middle bike seen by both cameras, a staggered partly
