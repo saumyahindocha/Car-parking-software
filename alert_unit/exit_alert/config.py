@@ -52,6 +52,7 @@ class DisplayConfig:
 class Config:
     edge_url: str = "http://edge.local:8000"
     device_key: str = "dev-device-key"
+    ca_file: Optional[str] = None  # site CA certificate when edge_url is https:// (install.sh --ca-url)
     gate_id: str = "G2"
     device_id: str = ""
     mock_gpio: Optional[bool] = None  # None = auto-detect (mock when not on a Raspberry Pi)

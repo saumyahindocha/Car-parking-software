@@ -16,10 +16,14 @@ out="$BACKUP_DIR/parking-$stamp.dump"
 pg_dump -Fc -Z 6 --no-owner -f "$out.tmp"
 mv "$out.tmp" "$out"
 sha256sum "$out" > "$out.sha256"
+# the site certificate authority: if it is lost, every phone and alert unit must re-trust a new one
+if [[ -d "${CADDY_DATA_DIR:-/srv/parking/caddy}/caddy/pki" ]]; then
+  tar -czf "$BACKUP_DIR/site-ca-$stamp.tgz" -C "${CADDY_DATA_DIR:-/srv/parking/caddy}/caddy" pki
+fi
 echo "$(date -Is) backup ok: $out ($(du -h "$out" | cut -f1))"
 if [[ -n "${BACKUP_AGE_RECIPIENT:-}" && -n "${BACKUP_RCLONE_REMOTE:-}" ]]; then
   age -r "$BACKUP_AGE_RECIPIENT" -o "$out.age" "$out"
   rclone copy "$out.age" "$BACKUP_RCLONE_REMOTE/" && rm -f "$out.age"
   echo "$(date -Is) encrypted cloud copy uploaded to $BACKUP_RCLONE_REMOTE"
 fi
-find "$BACKUP_DIR" -name 'parking-*.dump*' -mtime +"${BACKUP_KEEP_DAYS:-30}" -delete
+find "$BACKUP_DIR" \( -name 'parking-*.dump*' -o -name 'site-ca-*.tgz' \) -mtime +"${BACKUP_KEEP_DAYS:-30}" -delete

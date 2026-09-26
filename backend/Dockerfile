@@ -23,4 +23,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=20s --timeout=5s --retries=3 CMD curl -fs http://localhost:8000/api/health || exit 1
 ENTRYPOINT ["/usr/bin/tini", "--"]
 # single process on purpose: the WebSocket hub and the job scheduler live in this process
-CMD ["sh", "-c", "alembic upgrade head && python -m app.seed && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --timeout-keep-alive 30"]
+CMD ["sh", "-c", "alembic upgrade head && python -m app.seed && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips '*' --timeout-keep-alive 30"]

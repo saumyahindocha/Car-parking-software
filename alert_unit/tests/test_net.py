@@ -176,3 +176,28 @@ def test_heartbeat_beat_uses_metrics():
     assert hb.beat()
     assert got["device_id"] == "AU-G1" and got["metrics"]["ws_connected"] is False
     assert got["metrics"]["exits_seen"] == 3 and "uptime_s" in got["metrics"]
+
+
+def test_configure_tls_passes_site_ca_to_websocket_and_https(monkeypatch, tmp_path):
+    import ssl
+
+    from exit_alert import net
+
+    seen = {}
+
+    class FakeWS:
+        @staticmethod
+        def create_connection(url, **kw):
+            seen.update(kw)
+            return object()
+
+    monkeypatch.setitem(__import__("sys").modules, "websocket", FakeWS)
+    monkeypatch.setattr(ssl, "create_default_context", lambda cafile=None: ("ctx", cafile))
+    net.configure_tls(str(tmp_path / "site-ca.crt"))
+    net.default_connect("wss://edge/ws/device", 5)
+    assert seen["sslopt"] == {"ca_certs": str(tmp_path / "site-ca.crt")}
+    assert net._ssl_context == ("ctx", str(tmp_path / "site-ca.crt"))
+    net.configure_tls(None)
+    seen.clear()
+    net.default_connect("ws://edge/ws/device", 5)
+    assert "sslopt" not in seen and net._ssl_context is None

@@ -42,8 +42,25 @@ services:
       - ${IMAGE_DIR:-/srv/parking/images}:/data/images                # 4 TB HDD
       - ${UPLOAD_DIR:-/srv/parking/uploads}:/data/uploads
     ports:
-      - "8000:8000"                    # LAN: dashboard, worker phones, alert units
+      - "127.0.0.1:8000:8000"          # host-local only; the LAN reaches it through the HTTPS gateway
     stop_grace_period: 20s
+
+  gateway:
+    # Site HTTPS gateway (Caddy): https://<edge IP> for phones, dashboard PC and alert units.
+    image: caddy:2.10
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      PARK_SITE_IP: ${PARK_SITE_IP:?set PARK_SITE_IP (the edge server's LAN IP) in .env}
+      PARK_SITE_HOSTNAME: ${PARK_SITE_HOSTNAME:-parking.local}
+    ports:
+      - "80:80"                        # only serves /site-ca.crt and redirects to HTTPS
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${CADDY_DATA_DIR:-/srv/parking/caddy}:/data          # the site CA lives here: back it up
+      - ${CADDY_CERTS_DIR:-/srv/parking/certs}:/certs:ro      # optional own certificates
 
   anpr:
     build:

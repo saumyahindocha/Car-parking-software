@@ -56,7 +56,7 @@ dual NIC, online UPS, dual WAN (broadband + 4G/5G failover router).
    The installer sets up Docker, the NVIDIA container toolkit, **chrony as the site NTP server**,
    the firewall (API and NTP open to the LAN only), nightly backups (02:30) and a weekly automated
    restore test (Sunday 04:00), and a systemd unit (`parking.service`) that starts the stack at boot.
-4. Open `http://192.168.10.10:8000`, log in as the admin, then in **Configuration**:
+4. Install the site certificate on your PC (§2a), open `https://192.168.10.10`, log in as the admin, then in **Configuration**:
    * Site settings: lot name, GSTIN (if any), UPI VPA and payee name (used by the offline QR),
      receipt footer, cash limit, cash on/off, alert threshold, retention.
    * Tariffs and pass prices (defaults are seeded: ₹10 / 2 h, ₹5 per extra hour, ₹30 cap per 12 h,
@@ -81,6 +81,29 @@ docker compose logs -f backend anpr
 sudo systemctl restart parking
 ./backup.sh && ./verify_backup.sh     # manual backup + restore test
 ```
+
+### 2a. Site HTTPS (secure connections on the lot Wi-Fi)
+
+Everything on the LAN talks to the edge server over HTTPS through the gateway container (Caddy):
+`https://<edge IP>` for the dashboard, `https://<edge IP>/app` for the phone app, and the same for the
+exit alert units. The certificate is issued by the site's own certificate authority, created on first
+start ("Station Parking Site CA"). Each device trusts it **once**:
+
+| Device | Steps |
+|---|---|
+| **iPhone** | Safari → `http://<edge IP>/site-ca.crt` → *Allow* → Settings → *Profile Downloaded* → Install. Then Settings → General → About → **Certificate Trust Settings** → turn on "Station Parking Site CA". |
+| **Android** | Chrome → `http://<edge IP>/site-ca.crt` → it downloads → Settings → Security → *Encryption & credentials* → **Install a certificate → CA certificate** → pick the file. |
+| **Windows PC** (supervisor desk) | Download `http://<edge IP>/site-ca.crt` → double-click → *Install Certificate* → Local Machine → **Trusted Root Certification Authorities**. |
+| **Exit alert unit** | `install.sh … --edge-url https://<edge IP> --ca-url http://<edge IP>/site-ca.crt` (§4). |
+
+Notes:
+* The CA lives in `CADDY_DATA_DIR` (default `/srv/parking/caddy`) and is included in the nightly backup
+  (`site-ca-*.tgz`). If it is lost, every device must trust the new one.
+* Only `/site-ca.crt` is served over plain HTTP; every other HTTP request is redirected to HTTPS. Port
+  8000 is no longer reachable from the LAN.
+* To use certificates from your own or a public CA instead, put `site.crt`/`site.key` in
+  `CADDY_CERTS_DIR` and change `tls internal` to `tls /certs/site.crt /certs/site.key` in
+  `deploy/caddy/Caddyfile`.
 
 ---
 
@@ -110,7 +133,8 @@ Hardware: Pi 5 (4 GB) + official PSU + 64 GB high-endurance microSD, 24–32" hi
 1. Flash **Raspberry Pi OS Lite (64-bit, Bookworm)**, enable SSH, set hostname `au-g2`.
 2. Copy `alert_unit/` to the Pi and run:
    ```bash
-   sudo ./install.sh --edge-url http://192.168.10.10:8000 --key <PARK_DEVICE_API_KEY> --gate G2 --ntp 192.168.10.10
+   sudo ./install.sh --edge-url https://192.168.10.10 --ca-url http://192.168.10.10/site-ca.crt \
+        --key <PARK_DEVICE_API_KEY> --gate G2 --ntp 192.168.10.10
    ```
    It installs the packages, writes `/etc/alert-unit/config.yaml`, points NTP at the edge server,
    disables screen blanking and enables the `alert-unit` systemd service (fullscreen kiosk).
@@ -121,7 +145,7 @@ Hardware: Pi 5 (4 GB) + official PSU + 64 GB high-endurance microSD, 24–32" hi
 
 ## 5. Worker phones
 
-**Any phone, no install (iPhone or Android):** open `http://<edge server>:8000/app` on the lot Wi-Fi
+**Any phone, no install (iPhone or Android):** install the site certificate (§2a), then open `https://<edge server>/app` on the lot Wi-Fi
 and add it to the home screen. It talks to the server it was opened from.
 
 **Android app (best offline behaviour and camera plate scan):** download `parking-worker.apk` from the
@@ -133,7 +157,7 @@ GitHub release `demo-latest` (built automatically), or build it yourself:
 2. On each phone: enable *Install unknown apps* for the file manager, install
    `app-release.apk`, grant camera permission, connect to the site Wi-Fi, set the phone's time to
    automatic.
-3. First launch: set the server URL (`http://192.168.10.10:8000`), log in with the user's username
+3. Install the site certificate (§2a). First launch: the server URL defaults to `https://192.168.10.10`, log in with the user's username
    and PIN. **The account binds to that phone**; to move a user to a new phone, the admin resets the
    device binding (Dashboard → Configuration → Users).
 4. Give each worker a lockable cash pouch; supervisors use the same app in supervisor mode.

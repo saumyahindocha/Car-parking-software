@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The edge server runs on the lot LAN over plain HTTP (default http://192.168.10.2:8000).
-     Cleartext is allowed so the app can reach it; any HTTPS endpoint still uses system CAs. -->
+<!-- The edge server is reached through the site HTTPS gateway (https://<edge IP>), whose certificate
+     comes from the site's own CA. That CA is installed on each phone once (Settings > Security >
+     Install certificate), so user-installed CAs are trusted in addition to the system ones.
+     Cleartext stays allowed only for laptop demos (http://…:8000). -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system"/>
+            <certificates src="user"/>
         </trust-anchors>
     </base-config>
 </network-security-config>

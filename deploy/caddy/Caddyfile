@@ -1,0 +1,50 @@
+# Site HTTPS gateway for the edge server.
+#
+# Phones, the dashboard PC and the exit alert units talk to https://<edge IP or name>; Caddy terminates
+# TLS and forwards to the backend (REST + WebSockets). Certificates come from Caddy's own local
+# certificate authority ("Station Parking Site CA"), so no internet or domain is needed. Every device
+# trusts that CA once: it is downloadable at http://<edge>/site-ca.crt (see docs/INSTALL.md §2a).
+#
+# Using certificates from your own CA / a public CA instead: replace `tls internal` below with
+#   tls /certs/site.crt /certs/site.key      (mount the files into the container at /certs)
+{
+	# no ACME, no internet: everything is issued locally
+	local_certs
+	skip_install_trust
+	# our http:// block below does the redirect, so it can still serve the CA certificate
+	auto_https disable_redirects
+	# IP-address clients send no SNI; use the edge's LAN IP to pick the certificate
+	default_sni {$PARK_SITE_IP}
+	pki {
+		ca local {
+			name "Station Parking Site CA"
+		}
+	}
+}
+
+# Plain HTTP only hands out the CA certificate; everything else is redirected to HTTPS.
+http:// {
+	handle /site-ca.crt {
+		root * {$CADDY_PKI_DIR:/data/caddy/pki/authorities/local}
+		rewrite * /root.crt
+		header Content-Type application/x-x509-ca-cert
+		header Content-Disposition "attachment; filename=\"station-parking-site-ca.crt\""
+		file_server
+	}
+	handle {
+		redir https://{host}{uri} 308
+	}
+}
+
+{$PARK_SITE_IP}, {$PARK_SITE_HOSTNAME:parking.local} {
+	tls internal
+	encode gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy same-origin
+	}
+	reverse_proxy {$PARK_BACKEND_UPSTREAM:backend:8000} {
+		header_up X-Forwarded-Proto https
+	}
+}

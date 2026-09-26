@@ -15,7 +15,7 @@ import '../tariff/tariff.dart' show tzOffsetFor;
 import '../util/format.dart' show siteOffset;
 import 'collect_model.dart';
 
-const String _lanServerUrl = 'http://192.168.10.2:8000';
+const String _lanServerUrl = 'https://192.168.10.10';
 
 /// Browser build: always the server the app was loaded from (no address to type).
 /// Installed app: the lot's edge server on the LAN (editable on the login screen).

@@ -41,20 +41,24 @@ if [[ ! -f .env ]]; then
   for k in DB_PASSWORD PARK_SECRET_KEY PARK_ANPR_API_KEY PARK_DEVICE_API_KEY PARK_RELAY_API_KEY; do
     sed -i "s|^$k=.*|$k=$(openssl rand -hex 24)|" .env
   done
+  ip=$(hostname -I | awk '{print $1}')
+  sed -i "s|^PARK_SITE_IP=.*|PARK_SITE_IP=$ip|" .env
   chmod 600 .env
   echo "Generated deploy/.env — fill in gateway/SMS credentials, relay URL and storage paths, then re-run."
 fi
 set -a; source .env; set +a
 
 log "Storage"
-mkdir -p "$PG_DATA_DIR" "$IMAGE_DIR" "$UPLOAD_DIR" "$ANPR_STATE_DIR" "$MODEL_DIR" "$BACKUP_DIR"
+mkdir -p "$PG_DATA_DIR" "$IMAGE_DIR" "$UPLOAD_DIR" "$ANPR_STATE_DIR" "$MODEL_DIR" "$BACKUP_DIR" \
+         "${CADDY_DATA_DIR:-/srv/parking/caddy}" "${CADDY_CERTS_DIR:-/srv/parking/certs}"
 chown -R 1001 "$IMAGE_DIR" "$UPLOAD_DIR"
 chown -R 10001 "$ANPR_STATE_DIR"
 [[ -f config/site.yaml ]] || cp config/site.yaml.example config/site.yaml
 
-log "Firewall: SSH, API (LAN), NTP"
+log "Firewall: SSH, HTTPS gateway (LAN), NTP"
 ufw allow OpenSSH
-ufw allow from 192.168.0.0/16 to any port 8000 proto tcp
+ufw allow from 192.168.0.0/16 to any port 80 proto tcp
+ufw allow from 192.168.0.0/16 to any port 443 proto tcp
 ufw allow from 192.168.0.0/16 to any port 123 proto udp
 ufw --force enable
 
@@ -86,4 +90,7 @@ cp systemd/parking.service /etc/systemd/system/parking.service
 sed -i "s|__DIR__|$(pwd)|g" /etc/systemd/system/parking.service
 systemctl daemon-reload && systemctl enable parking.service
 
-log "Done. Dashboard: http://$(hostname -I | awk '{print $1}'):8000"
+log "Done."
+echo "  Dashboard:        https://$PARK_SITE_IP"
+echo "  Phone app:        https://$PARK_SITE_IP/app"
+echo "  Site certificate: http://$PARK_SITE_IP/site-ca.crt  (install once on each phone / PC, see docs/INSTALL.md §2a)"

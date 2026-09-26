@@ -13,7 +13,7 @@ from typing import Any, Optional
 
 from .config import Config, load_config
 from .display_state import DisplayModel
-from .net import Backoff, Heartbeat, ImageCache, WsLink
+from .net import Backoff, Heartbeat, ImageCache, WsLink, configure_tls
 from .relay import LightController, make_backend
 
 log = logging.getLogger("exit_alert")
@@ -22,6 +22,7 @@ log = logging.getLogger("exit_alert")
 class AlertUnit:
     def __init__(self, cfg: Config):
         self.cfg = cfg
+        configure_tls(cfg.ca_file)
         t = cfg.timing
         self.model = DisplayModel(max_slots=t.max_slots, red_hold=t.red_hold_s, green_hold=t.green_hold_s,
                                   neutral_hold=t.neutral_hold_s, warn_days=t.pass_expiry_warn_days)

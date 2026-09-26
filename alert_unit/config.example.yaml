@@ -2,7 +2,8 @@
 # Every key can also be set by environment variable: ALERT_EDGE_URL, ALERT_DEVICE_KEY,
 # nested ones with a double underscore: ALERT_PINS__RED=17, ALERT_TIMING__RED_HOLD_S=5, ...
 
-edge_url: http://192.168.10.10:8000   # edge server (backend) base URL
+edge_url: https://192.168.10.10       # edge server via the site HTTPS gateway (http://…:8000 without it)
+ca_file: /etc/alert-unit/site-ca.crt  # site CA certificate (install.sh --ca-url fetches it)
 device_key: change-me                 # = PARK_DEVICE_API_KEY on the edge server
 gate_id: G2                           # which gate's exits to show
 device_id: AU-G2                      # shown in the dashboard's device health list

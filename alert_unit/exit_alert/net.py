@@ -9,6 +9,7 @@ import json
 import logging
 import random
 import socket
+import ssl
 import threading
 import time
 import urllib.error
@@ -65,10 +66,25 @@ def _timeout_types() -> tuple[type[BaseException], ...]:
 TIMEOUTS = _timeout_types()
 
 
+# TLS: the site gateway uses its own certificate authority (see deploy/ in the main repo).
+# configure_tls(ca_file) makes every HTTPS/WSS call from this unit trust that CA.
+_ca_file: Optional[str] = None
+_ssl_context: Optional[ssl.SSLContext] = None
+
+
+def configure_tls(ca_file: Optional[str]) -> None:
+    global _ca_file, _ssl_context
+    _ca_file = ca_file or None
+    _ssl_context = ssl.create_default_context(cafile=_ca_file) if _ca_file else None
+
+
 def default_connect(url: str, timeout: float) -> WsConnection:
     import websocket  # websocket-client
 
-    return websocket.create_connection(url, timeout=timeout, enable_multithread=True)
+    kw: dict = {}
+    if url.startswith("wss://") and _ca_file:
+        kw["sslopt"] = {"ca_certs": _ca_file}
+    return websocket.create_connection(url, timeout=timeout, enable_multithread=True, **kw)
 
 
 class WsLink:
@@ -169,7 +185,7 @@ Opener = Callable[[urllib.request.Request, float], Any]
 
 
 def _default_open(req: urllib.request.Request, timeout: float) -> Any:
-    return urllib.request.urlopen(req, timeout=timeout)  # noqa: S310 - URL comes from config
+    return urllib.request.urlopen(req, timeout=timeout, context=_ssl_context)  # noqa: S310 - URL comes from config
 
 
 class ImageCache:

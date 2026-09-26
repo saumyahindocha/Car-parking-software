@@ -44,7 +44,7 @@ then add `android/key.properties` (git-ignored) and a `signingConfigs.release` b
 2. Copy `app-release.apk` to the phone (USB, or download it from the edge server's LAN share) and
    open it, **or** with USB debugging on: `adb install -r app-release.apk`.
 3. Connect the phone to the lot Wi-Fi (the edge server is on the LAN).
-4. Open **Parking Worker**. The server URL defaults to `http://192.168.10.2:8000`; tap
+4. Open **Parking Worker**. The server URL defaults to `https://192.168.10.10` (install the site certificate first, see docs/INSTALL.md §2a); tap
    *Server: …* on the login screen to change it and *Save & test connection*. It is stored on the phone.
 5. Grant the camera permission when first scanning a plate / photographing cash.
 

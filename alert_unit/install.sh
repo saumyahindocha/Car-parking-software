@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 # Install the exit alert unit on Raspberry Pi OS Bookworm (64-bit, Lite recommended).
-# Usage: sudo ./install.sh [--edge-url http://192.168.10.10:8000] [--key DEVICE_KEY] [--gate G2] [--ntp 192.168.10.10]
+# Usage: sudo ./install.sh [--edge-url https://192.168.10.10] [--key DEVICE_KEY] [--gate G2] [--ntp 192.168.10.10]
+#                         [--ca-url http://192.168.10.10/site-ca.crt]   (trust the site's HTTPS certificate)
 set -euo pipefail
 
-EDGE_URL="" KEY="" GATE="" NTP=""
+EDGE_URL="" KEY="" GATE="" NTP="" CA_URL=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --edge-url) EDGE_URL="$2"; shift 2 ;;
     --key) KEY="$2"; shift 2 ;;
     --gate) GATE="$2"; shift 2 ;;
     --ntp) NTP="$2"; shift 2 ;;
+    --ca-url) CA_URL="$2"; shift 2 ;;
     *) echo "unknown option $1" >&2; exit 2 ;;
   esac
 done
@@ -46,6 +48,16 @@ fi
 [[ -n "$KEY" ]] && sed -i "s|^device_key:.*|device_key: $KEY|" /etc/alert-unit/config.yaml
 if [[ -n "$GATE" ]]; then
   sed -i "s|^gate_id:.*|gate_id: $GATE|; s|^device_id:.*|device_id: AU-$GATE|" /etc/alert-unit/config.yaml
+fi
+if [[ -n "$CA_URL" ]]; then
+  echo "==> site certificate"
+  curl -fsSL "$CA_URL" -o /etc/alert-unit/site-ca.crt
+  grep -q "BEGIN CERTIFICATE" /etc/alert-unit/site-ca.crt || { echo "not a certificate: $CA_URL"; exit 1; }
+  if grep -q "^ca_file:" /etc/alert-unit/config.yaml; then
+    sed -i "s|^ca_file:.*|ca_file: /etc/alert-unit/site-ca.crt|" /etc/alert-unit/config.yaml
+  else
+    echo "ca_file: /etc/alert-unit/site-ca.crt" >> /etc/alert-unit/config.yaml
+  fi
 fi
 chown root:alertunit /etc/alert-unit/config.yaml
 chmod 640 /etc/alert-unit/config.yaml
