@@ -135,54 +135,73 @@ class _SearchScreenState extends State<SearchScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final body = Column(children: [
-      Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(children: [
-          Expanded(
-            child: TextField(
-              controller: _q,
-              autofocus: !widget.supervisorMode,
-              textCapitalization: TextCapitalization.characters,
-              style: const TextStyle(fontSize: 20, fontFamily: 'monospace', fontWeight: FontWeight.w700),
-              decoration: InputDecoration(
-                hintText: 'Plate e.g. MH43AB1234',
-                prefixIcon: const Icon(Icons.search),
-                border: const OutlineInputBorder(),
-                suffixIcon: _q.text.isEmpty
-                    ? null
-                    : IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          _q.clear();
-                          _search('');
-                        }),
+    final body = Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _q,
+                  autofocus: !widget.supervisorMode,
+                  textCapitalization: TextCapitalization.characters,
+                  style: const TextStyle(fontSize: 20, fontFamily: 'monospace', fontWeight: FontWeight.w700),
+                  decoration: InputDecoration(
+                    hintText: 'Plate e.g. MH43AB1234',
+                    prefixIcon: const Icon(Icons.search),
+                    border: const OutlineInputBorder(),
+                    suffixIcon: _q.text.isEmpty
+                        ? null
+                        : IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              _q.clear();
+                              _search('');
+                            },
+                          ),
+                  ),
+                  onChanged: (v) {
+                    setState(() {});
+                    _onChanged(v);
+                  },
+                  onSubmitted: _search,
+                ),
               ),
-              onChanged: (v) {
-                setState(() {});
-                _onChanged(v);
-              },
-              onSubmitted: _search,
+              const SizedBox(width: 8),
+              SizedBox(
+                height: 58,
+                child: FilledButton.tonalIcon(
+                  onPressed: _scan,
+                  icon: const Icon(Icons.camera_alt),
+                  label: const Text('Scan'),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (_loading) const LinearProgressIndicator(),
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: Text(_error!, style: const TextStyle(color: dueRed)),
+          ),
+        if (_searchedOffline)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 12),
+            child: Text(
+              'Offline: searching the saved To-collect list only.',
+              style: TextStyle(color: Colors.deepOrange),
             ),
           ),
-          const SizedBox(width: 8),
-          SizedBox(
-            height: 58,
-            child: FilledButton.tonalIcon(onPressed: _scan, icon: const Icon(Icons.camera_alt), label: const Text('Scan')),
-          ),
-        ]),
-      ),
-      if (_loading) const LinearProgressIndicator(),
-      if (_error != null) Padding(padding: const EdgeInsets.all(8), child: Text(_error!, style: const TextStyle(color: dueRed))),
-      if (_searchedOffline)
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 12),
-          child: Text('Offline: searching the saved To-collect list only.', style: TextStyle(color: Colors.deepOrange)),
-        ),
-      Expanded(child: _list()),
-    ]);
+        Expanded(child: _list()),
+      ],
+    );
     if (widget.supervisorMode) {
-      return Scaffold(appBar: AppBar(title: const Text('Find payment to reverse / refund')), body: body);
+      return Scaffold(
+        appBar: AppBar(title: const Text('Find payment to reverse / refund')),
+        body: body,
+      );
     }
     return body;
   }
@@ -198,10 +217,14 @@ class _SearchScreenState extends State<SearchScreen> {
           return ListTile(
             leading: PlateImage(item.plateImage, width: 90, height: 46),
             title: PlateText(item.displayPlate, size: 16),
-            subtitle: Text('In ${timeIst(item.entryAt)} · ${d == 0 ? 'exact' : 'close match'}'
-                '${item.previousDuePaise > 0 ? ' · dues ${rupees(item.previousDuePaise)}' : ''}'),
+            subtitle: Text(
+              'In ${timeIst(item.entryAt)} · ${d == 0 ? 'exact' : 'close match'}'
+              '${item.previousDuePaise > 0 ? ' · dues ${rupees(item.previousDuePaise)}' : ''}',
+            ),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CollectFlowScreen(target: targetFromItem(item)))),
+            onTap: () =>
+                Navigator.of(context)
+                    .push(MaterialPageRoute(builder: (_) => CollectFlowScreen(target: targetFromItem(item)))),
           );
         },
       );
@@ -211,23 +234,31 @@ class _SearchScreenState extends State<SearchScreen> {
       if (q.length < 3) return const EmptyState('Type 3+ characters of the plate, or scan it.', icon: Icons.search);
       if (_loading) return const SizedBox.shrink();
       final corr = plates.correct(q, _app.settings.stateCodes.isEmpty ? null : _app.settings.stateCodes);
-      return ListView(children: [
-        const EmptyState('No vehicle found.'),
-        if (corr.valid && !widget.supervisorMode)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: OutlinedButton.icon(
-              icon: const Icon(Icons.card_membership),
-              label: Text('Sell a pass to ${plates.display(corr.plate)}'),
-              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-                builder: (_) => PassSellScreen(
-                  target: CollectTarget(
-                      vehicleId: 0, plate: corr.plate, displayPlate: plates.display(corr.plate), vehicleClass: 'BIKE'),
+      return ListView(
+        children: [
+          const EmptyState('No vehicle found.'),
+          if (corr.valid && !widget.supervisorMode)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.card_membership),
+                label: Text('Sell a pass to ${plates.display(corr.plate)}'),
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => PassSellScreen(
+                      target: CollectTarget(
+                        vehicleId: 0,
+                        plate: corr.plate,
+                        displayPlate: plates.display(corr.plate),
+                        vehicleClass: 'BIKE',
+                      ),
+                    ),
+                  ),
                 ),
-              )),
+              ),
             ),
-          ),
-      ]);
+        ],
+      );
     }
     return ListView.separated(
       itemCount: _results.length,
@@ -250,33 +281,50 @@ class _ResultTile extends StatelessWidget {
       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => VehicleScreen(vehicleId: v.id))),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        child: Row(children: [
-          PlateImage(v.plateImage, width: 100, height: 50),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Flexible(child: PlateText(v.displayPlate, size: 16)),
-                const SizedBox(width: 6),
-                Badge2(v.exact ? 'Exact' : 'Close match (${v.distance})', color: v.exact ? paidGreen : Colors.orange),
-              ]),
-              const SizedBox(height: 4),
-              Wrap(spacing: 6, runSpacing: 3, children: [
-                if (s != null) Badge2('${s.status} since ${timeIst(s.entryAt)}', color: Colors.blueGrey),
-                if (v.activePass != null) Badge2('Pass till ${dateIst(v.activePass!.endsAt)}', color: Colors.purple),
-                if (v.duePaise > 0) Badge2('Dues ${rupees(v.duePaise)}', color: dueRed),
-                if (v.creditPaise > 0) Badge2('Credit ${rupees(v.creditPaise)}', color: paidGreen),
-              ]),
-            ]),
-          ),
-          if (canCollect)
-            FilledButton(
-              onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CollectFlowScreen(target: targetFromVehicle(v)))),
-              child: const Text('Collect'),
-            )
-          else
-            const Icon(Icons.chevron_right),
-        ]),
+        child: Row(
+          children: [
+            PlateImage(v.plateImage, width: 100, height: 50),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(child: PlateText(v.displayPlate, size: 16)),
+                      const SizedBox(width: 6),
+                      Badge2(
+                        v.exact ? 'Exact' : 'Close match (${v.distance})',
+                        color: v.exact ? paidGreen : Colors.orange,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 3,
+                    children: [
+                      if (s != null) Badge2('${s.status} since ${timeIst(s.entryAt)}', color: Colors.blueGrey),
+                      if (v.activePass != null)
+                        Badge2('Pass till ${dateIst(v.activePass!.endsAt)}', color: Colors.purple),
+                      if (v.duePaise > 0) Badge2('Dues ${rupees(v.duePaise)}', color: dueRed),
+                      if (v.creditPaise > 0) Badge2('Credit ${rupees(v.creditPaise)}', color: paidGreen),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            if (canCollect)
+              FilledButton(
+                onPressed: () =>
+                    Navigator.of(context)
+                        .push(MaterialPageRoute(builder: (_) => CollectFlowScreen(target: targetFromVehicle(v)))),
+                child: const Text('Collect'),
+              )
+            else
+              const Icon(Icons.chevron_right),
+          ],
+        ),
       ),
     );
   }

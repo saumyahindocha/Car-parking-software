@@ -39,7 +39,13 @@ class SyncOutcome {
 ///   the supervisor); the rest of the batch still applies.
 /// * Network errors leave everything PENDING for the next attempt.
 class SyncService extends ChangeNotifier {
-  SyncService(this.store, this.transport, {required this.userId, this.batchSize = 50, this.interval = const Duration(seconds: 20)});
+  SyncService(
+    this.store,
+    this.transport, {
+    required this.userId,
+    this.batchSize = 50,
+    this.interval = const Duration(seconds: 20),
+  });
 
   final LocalStore store;
   final SyncTransport transport;

@@ -60,27 +60,27 @@ class QueueItem {
 
   /// Item as sent to `/api/sync`.
   Map<String, dynamic> toSyncJson() => {
-        'type': type,
-        'client_uuid': clientUuid,
-        'created_at': createdAt.toUtc().toIso8601String(),
-        'data': data,
-      };
+    'type': type,
+    'client_uuid': clientUuid,
+    'created_at': createdAt.toUtc().toIso8601String(),
+    'data': data,
+  };
 
   factory QueueItem.fromRow(Map<String, Object?> r) => QueueItem(
-        id: r['id'] as int,
-        clientUuid: r['client_uuid'] as String,
-        type: r['type'] as String,
-        data: Map<String, dynamic>.from(jsonDecode(r['data'] as String) as Map),
-        createdAt: DateTime.parse(r['created_at'] as String),
-        status: r['status'] as String,
-        userId: (r['user_id'] as int?) ?? 0,
-        error: r['error'] as String?,
-        attempts: (r['attempts'] as int?) ?? 0,
-        amountPaise: (r['amount_paise'] as int?) ?? 0,
-        label: r['label'] as String?,
-        syncedAt: r['synced_at'] == null ? null : DateTime.tryParse(r['synced_at'] as String),
-        result: r['result'] == null ? null : Map<String, dynamic>.from(jsonDecode(r['result'] as String) as Map),
-      );
+    id: r['id'] as int,
+    clientUuid: r['client_uuid'] as String,
+    type: r['type'] as String,
+    data: Map<String, dynamic>.from(jsonDecode(r['data'] as String) as Map),
+    createdAt: DateTime.parse(r['created_at'] as String),
+    status: r['status'] as String,
+    userId: (r['user_id'] as int?) ?? 0,
+    error: r['error'] as String?,
+    attempts: (r['attempts'] as int?) ?? 0,
+    amountPaise: (r['amount_paise'] as int?) ?? 0,
+    label: r['label'] as String?,
+    syncedAt: r['synced_at'] == null ? null : DateTime.tryParse(r['synced_at'] as String),
+    result: r['result'] == null ? null : Map<String, dynamic>.from(jsonDecode(r['result'] as String) as Map),
+  );
 }
 
 /// SQLite storage on the phone: the offline action queue ("outbox") and a
@@ -97,11 +97,12 @@ class LocalStore {
   static Future<LocalStore> open({DatabaseFactory? factory, String? path}) async {
     final f = factory ?? databaseFactory;
     final dbPath = path ?? p.join(await f.getDatabasesPath(), 'parking_worker.db');
-    final db = await f.openDatabase(dbPath,
-        options: OpenDatabaseOptions(
-          version: 1,
-          onCreate: (db, _) async {
-            await db.execute('''
+    final db = await f.openDatabase(
+      dbPath,
+      options: OpenDatabaseOptions(
+        version: 1,
+        onCreate: (db, _) async {
+          await db.execute('''
               CREATE TABLE outbox(
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 client_uuid TEXT NOT NULL UNIQUE,
@@ -117,10 +118,11 @@ class LocalStore {
                 synced_at TEXT,
                 result TEXT
               )''');
-            await db.execute('CREATE INDEX outbox_status ON outbox(status, id)');
-            await db.execute('CREATE TABLE cache(key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL)');
-          },
-        ));
+          await db.execute('CREATE INDEX outbox_status ON outbox(status, id)');
+          await db.execute('CREATE TABLE cache(key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL)');
+        },
+      ),
+    );
     return LocalStore._(db);
   }
 
@@ -177,8 +179,13 @@ class LocalStore {
       where.add('user_id = ?');
       args.add(userId);
     }
-    final rows = await db.query('outbox',
-        where: where.isEmpty ? null : where.join(' AND '), whereArgs: args, orderBy: 'id ASC', limit: limit);
+    final rows = await db.query(
+      'outbox',
+      where: where.isEmpty ? null : where.join(' AND '),
+      whereArgs: args,
+      orderBy: 'id ASC',
+      limit: limit,
+    );
     return rows.map(QueueItem.fromRow).toList();
   }
 
@@ -188,18 +195,21 @@ class LocalStore {
   Future<List<QueueItem>> failed({int? userId}) => items(statuses: [QueueStatus.failed], userId: userId);
 
   Future<List<QueueItem>> recentDone({int? userId, int limit = 50}) async {
-    final rows = await db.query('outbox',
-        where: userId == null ? 'status = ?' : 'status = ? AND user_id = ?',
-        whereArgs: userId == null ? [QueueStatus.done] : [QueueStatus.done, userId],
-        orderBy: 'id DESC',
-        limit: limit);
+    final rows = await db.query(
+      'outbox',
+      where: userId == null ? 'status = ?' : 'status = ? AND user_id = ?',
+      whereArgs: userId == null ? [QueueStatus.done] : [QueueStatus.done, userId],
+      orderBy: 'id DESC',
+      limit: limit,
+    );
     return rows.map(QueueItem.fromRow).toList();
   }
 
   Future<int> count(String status, {int? userId}) async {
     final r = await db.rawQuery(
-        'SELECT COUNT(*) AS n FROM outbox WHERE status = ?${userId == null ? '' : ' AND user_id = ?'}',
-        [status, ?userId]);
+      'SELECT COUNT(*) AS n FROM outbox WHERE status = ?${userId == null ? '' : ' AND user_id = ?'}',
+      [status, ?userId],
+    );
     return (r.first['n'] as int?) ?? 0;
   }
 
@@ -207,9 +217,10 @@ class LocalStore {
   /// (pending or failed CASH items). Counted towards the device cash-in-hand.
   Future<int> unsyncedCashPaise({int? userId}) async {
     final r = await db.rawQuery(
-        "SELECT COALESCE(SUM(amount_paise), 0) AS s FROM outbox WHERE type = 'CASH' AND status IN ('PENDING','FAILED')"
-        "${userId == null ? '' : ' AND user_id = ?'}",
-        [?userId]);
+      "SELECT COALESCE(SUM(amount_paise), 0) AS s FROM outbox WHERE type = 'CASH' AND status IN ('PENDING','FAILED')"
+      "${userId == null ? '' : ' AND user_id = ?'}",
+      [?userId],
+    );
     return (r.first['s'] as int?) ?? 0;
   }
 
@@ -224,27 +235,32 @@ class LocalStore {
   }
 
   Future<void> markDone(String uuid, {Map<String, dynamic>? result}) => db.update(
-      'outbox',
-      {
-        'status': QueueStatus.done,
-        'error': null,
-        'synced_at': DateTime.now().toUtc().toIso8601String(),
-        'result': result == null ? null : jsonEncode(result),
-      },
-      where: 'client_uuid = ?',
-      whereArgs: [uuid]);
+    'outbox',
+    {
+      'status': QueueStatus.done,
+      'error': null,
+      'synced_at': DateTime.now().toUtc().toIso8601String(),
+      'result': result == null ? null : jsonEncode(result),
+    },
+    where: 'client_uuid = ?',
+    whereArgs: [uuid],
+  );
 
   Future<void> markFailed(String uuid, String error) => db.rawUpdate(
-      'UPDATE outbox SET status = ?, error = ?, attempts = attempts + 1 WHERE client_uuid = ?',
-      [QueueStatus.failed, error, uuid]);
+    'UPDATE outbox SET status = ?, error = ?, attempts = attempts + 1 WHERE client_uuid = ?',
+    [QueueStatus.failed, error, uuid],
+  );
 
   Future<void> markAttempt(String uuid) =>
       db.rawUpdate('UPDATE outbox SET attempts = attempts + 1 WHERE client_uuid = ?', [uuid]);
 
   /// Put failed items back in the queue (the "Retry now" button).
-  Future<int> requeueFailed({int? userId}) => db.update('outbox', {'status': QueueStatus.pending},
-      where: userId == null ? 'status = ?' : 'status = ? AND user_id = ?',
-      whereArgs: userId == null ? [QueueStatus.failed] : [QueueStatus.failed, userId]);
+  Future<int> requeueFailed({int? userId}) => db.update(
+    'outbox',
+    {'status': QueueStatus.pending},
+    where: userId == null ? 'status = ?' : 'status = ? AND user_id = ?',
+    whereArgs: userId == null ? [QueueStatus.failed] : [QueueStatus.failed, userId],
+  );
 
   /// Merge fields into a still-pending item's data (e.g. the customer gave a
   /// mobile number after an offline cash payment was queued). Returns false if
@@ -252,8 +268,14 @@ class LocalStore {
   Future<bool> patchPending(String uuid, Map<String, dynamic> patch) async {
     final item = await byUuid(uuid);
     if (item == null || item.status != QueueStatus.pending) return false;
-    final n = await db.update('outbox', {'data': jsonEncode({...item.data, ...patch})},
-        where: 'client_uuid = ? AND status = ?', whereArgs: [uuid, QueueStatus.pending]);
+    final n = await db.update(
+      'outbox',
+      {
+        'data': jsonEncode({...item.data, ...patch}),
+      },
+      where: 'client_uuid = ? AND status = ?',
+      whereArgs: [uuid, QueueStatus.pending],
+    );
     return n == 1;
   }
 
@@ -261,14 +283,18 @@ class LocalStore {
       db.update('outbox', {'status': QueueStatus.pending}, where: 'client_uuid = ?', whereArgs: [uuid]);
 
   /// Drops synced history older than [keep]. Pending and failed items are never pruned.
-  Future<int> pruneDone({Duration keep = const Duration(days: 7)}) => db.delete('outbox',
-      where: 'status = ? AND synced_at < ?',
-      whereArgs: [QueueStatus.done, DateTime.now().toUtc().subtract(keep).toIso8601String()]);
+  Future<int> pruneDone({Duration keep = const Duration(days: 7)}) => db.delete(
+    'outbox',
+    where: 'status = ? AND synced_at < ?',
+    whereArgs: [QueueStatus.done, DateTime.now().toUtc().subtract(keep).toIso8601String()],
+  );
 
   // ------------------------------------------------------------------ cache
-  Future<void> putCache(String key, Object? value) => db.insert(
-      'cache', {'key': key, 'value': jsonEncode(value), 'updated_at': DateTime.now().toUtc().toIso8601String()},
-      conflictAlgorithm: ConflictAlgorithm.replace);
+  Future<void> putCache(String key, Object? value) => db.insert('cache', {
+    'key': key,
+    'value': jsonEncode(value),
+    'updated_at': DateTime.now().toUtc().toIso8601String(),
+  }, conflictAlgorithm: ConflictAlgorithm.replace);
 
   Future<T?> getCache<T>(String key) async {
     final r = await db.query('cache', where: 'key = ?', whereArgs: [key]);

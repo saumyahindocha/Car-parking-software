@@ -52,6 +52,9 @@ def live(db: Session = Depends(get_db), user: User = Depends(supervisor)):
 def _sheet_rows(data: Any) -> list[dict]:
     if isinstance(data, list):
         return data
+    if isinstance(data, dict) and "unrecovered_one_time" in data:  # defaulters: both lists, labelled
+        return ([{"category": "defaulter", **r} for r in data["defaulters"]]
+                + [{"category": "unrecovered one-time", **r} for r in data["unrecovered_one_time"]])
     if isinstance(data, dict):
         for k in ("rows", "defaulters", "per_worker"):
             if isinstance(data.get(k), list):
@@ -60,9 +63,24 @@ def _sheet_rows(data: Any) -> list[dict]:
     return []
 
 
+def _cash_recon_range(db: Session, start: str, end: Optional[str]) -> Any:
+    """One day: the full reconciliation. A range: one summary row per day."""
+    if not end or end == start:
+        return cash.cash_reconciliation(db, start)
+    from datetime import date as _date
+
+    d, last = _date.fromisoformat(start), _date.fromisoformat(end)
+    rows = []
+    while d <= last:
+        r = cash.cash_reconciliation(db, d.isoformat())
+        rows.append({k: v for k, v in r.items() if not isinstance(v, (list, dict))})
+        d += timedelta(days=1)
+    return rows
+
+
 REPORTS: dict[str, Callable[..., Any]] = {
     "revenue": lambda db, s, e: reports.daily_revenue(db, s, e),
-    "cash-reconciliation": lambda db, s, e: cash.cash_reconciliation(db, s),
+    "cash-reconciliation": lambda db, s, e: _cash_recon_range(db, s, e),
     "worker-comparison": lambda db, s, e: reports.worker_comparison(db, s, e),
     "collections": lambda db, s, e: reports.collections_per_worker(db, s, e),
     "disputes": lambda db, s, e: reports.disputes_by_worker(db, s, e),

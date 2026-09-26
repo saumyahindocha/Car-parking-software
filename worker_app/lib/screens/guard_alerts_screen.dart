@@ -135,75 +135,98 @@ class _GuardAlertsScreenState extends State<GuardAlertsScreen> {
     final gates = context.watch<AppState>().bootstrap?.gates ?? const {};
     return RefreshIndicator(
       onRefresh: _load,
-      child: ListView(padding: const EdgeInsets.all(12), children: [
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(10)),
-          child: const Row(children: [
-            Icon(Icons.info, color: upiBlue),
-            SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'Do NOT stop vehicles. These alerts are only to identify and note vehicles leaving with dues. '
-                'Dues are recovered automatically at the next entry.',
-                style: TextStyle(fontSize: 14),
-              ),
-            ),
-          ]),
-        ),
-        if (_loading) const LinearProgressIndicator(),
-        if (_error != null) Padding(padding: const EdgeInsets.all(8), child: Text(_error!, style: const TextStyle(color: Colors.deepOrange))),
-        if (list.isEmpty && !_loading) const EmptyState('No unpaid exits right now.', icon: Icons.verified_user),
-        for (final a in list)
-          Card(
-            elevation: 3,
-            margin: const EdgeInsets.symmetric(vertical: 6),
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Row(children: [
-                  PlateImage(a.plateImage, width: 140, height: 70),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      PlateText(a.displayPlate, size: 20),
-                      const SizedBox(height: 4),
-                      Text('Due ${rupees(a.amountDuePaise)}',
-                          style: const TextStyle(color: dueRed, fontSize: 22, fontWeight: FontWeight.w900)),
-                      Text('${gates[a.gateId] ?? a.gateId ?? ''} · ${timeIst(a.createdAt)}',
-                          style: const TextStyle(color: Colors.black54)),
-                    ]),
+      child: ListView(
+        padding: const EdgeInsets.all(12),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(10)),
+            child: const Row(
+              children: [
+                Icon(Icons.info, color: upiBlue),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Do NOT stop vehicles. These alerts are only to identify and note vehicles leaving with dues. '
+                    'Dues are recovered automatically at the next entry.',
+                    style: TextStyle(fontSize: 14),
                   ),
-                ]),
-                const SizedBox(height: 10),
-                Row(children: [
-                  Expanded(
-                    child: SizedBox(
-                      height: 52,
-                      child: FilledButton.icon(
-                        style: FilledButton.styleFrom(backgroundColor: Colors.deepOrange),
-                        onPressed: _disputed.contains(a.id) ? null : () => _customerSaysPaid(a),
-                        icon: const Icon(Icons.record_voice_over),
-                        label: const Text('Customer says paid'),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: SizedBox(
-                      height: 52,
-                      child: OutlinedButton.icon(
-                        onPressed: () => _ack(a, note: 'Noted by guard'),
-                        icon: const Icon(Icons.check),
-                        label: const Text('Noted'),
-                      ),
-                    ),
-                  ),
-                ]),
-              ]),
+                ),
+              ],
             ),
           ),
-      ]),
+          if (_loading) const LinearProgressIndicator(),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.all(8),
+              child: Text(_error!, style: const TextStyle(color: Colors.deepOrange)),
+            ),
+          if (list.isEmpty && !_loading) const EmptyState('No unpaid exits right now.', icon: Icons.verified_user),
+          for (final a in list)
+            Card(
+              elevation: 3,
+              margin: const EdgeInsets.symmetric(vertical: 6),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        PlateImage(a.plateImage, width: 140, height: 70),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              PlateText(a.displayPlate, size: 20),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Due ${rupees(a.amountDuePaise)}',
+                                style: const TextStyle(color: dueRed, fontSize: 22, fontWeight: FontWeight.w900),
+                              ),
+                              Text(
+                                '${gates[a.gateId] ?? a.gateId ?? ''} · ${timeIst(a.createdAt)}',
+                                style: const TextStyle(color: Colors.black54),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SizedBox(
+                            height: 52,
+                            child: FilledButton.icon(
+                              style: FilledButton.styleFrom(backgroundColor: Colors.deepOrange),
+                              onPressed: _disputed.contains(a.id) ? null : () => _customerSaysPaid(a),
+                              icon: const Icon(Icons.record_voice_over),
+                              label: const Text('Customer says paid'),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: SizedBox(
+                            height: 52,
+                            child: OutlinedButton.icon(
+                              onPressed: () => _ack(a, note: 'Noted by guard'),
+                              icon: const Icon(Icons.check),
+                              label: const Text('Noted'),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -225,41 +248,48 @@ class _DisputeSheetState extends State<_DisputeSheet> {
   Widget build(BuildContext context) {
     return Padding(
       padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(context).viewInsets.bottom + 20),
-      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Text('${widget.alert.displayPlate}: customer says they paid', style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 12),
-        SegmentedButton<String>(
-          segments: const [
-            ButtonSegment(value: 'CASH', label: Text('Cash'), icon: Icon(Icons.payments)),
-            ButtonSegment(value: 'UPI', label: Text('UPI'), icon: Icon(Icons.qr_code_2)),
-          ],
-          selected: {_mode},
-          onSelectionChanged: (s) => setState(() => _mode = s.first),
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _amt,
-          keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          decoration: const InputDecoration(labelText: 'Amount they say they paid (optional)', prefixText: '₹ '),
-        ),
-        TextField(
-          controller: _note,
-          decoration: const InputDecoration(labelText: 'Note (optional) e.g. paid the worker near gate 2'),
-        ),
-        const SizedBox(height: 16),
-        SizedBox(
-          height: 54,
-          child: FilledButton(
-            onPressed: () {
-              final rs = int.tryParse(_amt.text.trim());
-              final note = _note.text.trim();
-              Navigator.pop(context, (_mode, rs == null ? null : rs * 100, note.isEmpty ? null : note));
-            },
-            child: const Text('Raise dispute', style: TextStyle(fontSize: 17)),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            '${widget.alert.displayPlate}: customer says they paid',
+            style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800),
           ),
-        ),
-      ]),
+          const SizedBox(height: 12),
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'CASH', label: Text('Cash'), icon: Icon(Icons.payments)),
+              ButtonSegment(value: 'UPI', label: Text('UPI'), icon: Icon(Icons.qr_code_2)),
+            ],
+            selected: {_mode},
+            onSelectionChanged: (s) => setState(() => _mode = s.first),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _amt,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            decoration: const InputDecoration(labelText: 'Amount they say they paid (optional)', prefixText: '₹ '),
+          ),
+          TextField(
+            controller: _note,
+            decoration: const InputDecoration(labelText: 'Note (optional) e.g. paid the worker near gate 2'),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 54,
+            child: FilledButton(
+              onPressed: () {
+                final rs = int.tryParse(_amt.text.trim());
+                final note = _note.text.trim();
+                Navigator.pop(context, (_mode, rs == null ? null : rs * 100, note.isEmpty ? null : note));
+              },
+              child: const Text('Raise dispute', style: TextStyle(fontSize: 17)),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

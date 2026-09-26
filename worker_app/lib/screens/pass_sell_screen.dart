@@ -79,7 +79,9 @@ class _PassSellScreenState extends State<PassSellScreen> {
     setState(() => _busy = true);
     PaymentInfo? existing;
     try {
-      existing = await _app.api.sellPass(r.passSellBody(mode: 'UPI', phone: _phoneValue, clientUuid: LocalStore.newUuid()));
+      existing = await _app.api.sellPass(
+        r.passSellBody(mode: 'UPI', phone: _phoneValue, clientUuid: LocalStore.newUuid()),
+      );
     } on NetworkException {
       if (_t.vehicleId <= 0) {
         if (mounted) showSnack(context, 'Selling a pass to a new plate needs the server.', error: true);
@@ -94,7 +96,10 @@ class _PassSellScreenState extends State<PassSellScreen> {
     if (!mounted) return;
     setState(() => _busy = false);
     final done = await Navigator.of(context).push<bool>(
-        MaterialPageRoute(builder: (_) => UpiPayScreen(request: r, existing: existing, phone: _phoneValue)));
+      MaterialPageRoute(
+        builder: (_) => UpiPayScreen(request: r, existing: existing, phone: _phoneValue),
+      ),
+    );
     if (done == true && mounted) Navigator.pop(context, true);
   }
 
@@ -112,8 +117,13 @@ class _PassSellScreenState extends State<PassSellScreen> {
       showSnack(context, 'Selling a pass to a new plate needs the server.', error: true);
       return;
     }
-    final ok = await confirmDialog(context, 'Cash received ${rupees(r.payablePaise)}?', '${r.passName} for ${_t.displayPlate}.',
-        ok: 'Cash received ${rupees(r.payablePaise)}', okColor: paidGreen);
+    final ok = await confirmDialog(
+      context,
+      'Cash received ${rupees(r.payablePaise)}?',
+      '${r.passName} for ${_t.displayPlate}.',
+      ok: 'Cash received ${rupees(r.payablePaise)}',
+      okColor: paidGreen,
+    );
     if (!ok || !mounted) return;
     String? phone = _phoneValue;
     var onFile = false;
@@ -127,12 +137,20 @@ class _PassSellScreenState extends State<PassSellScreen> {
     try {
       final res = await svc.recordCash(r, phone: phone);
       if (!mounted) return;
-      await Navigator.of(context).pushReplacement(MaterialPageRoute(
-        builder: (_) => ReceiptScreen(
-          args: ReceiptArgs(
-              request: r, mode: 'CASH', payment: res.payment, clientUuid: res.clientUuid, phone: phone, phoneOnFile: onFile),
+      await Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => ReceiptScreen(
+            args: ReceiptArgs(
+              request: r,
+              mode: 'CASH',
+              payment: res.payment,
+              clientUuid: res.clientUuid,
+              phone: phone,
+              phoneOnFile: onFile,
+            ),
+          ),
         ),
-      ));
+      );
     } on CashBlocked catch (e) {
       if (mounted) showSnack(context, e.message, error: true);
     } catch (e) {
@@ -151,75 +169,100 @@ class _PassSellScreenState extends State<PassSellScreen> {
     final active = _passes.where((p) => p.status == 'ACTIVE').toList();
     return Scaffold(
       appBar: AppBar(title: const Text('Sell / renew pass')),
-      body: Column(children: [
-        const ConnectivityBar(),
-        Expanded(
-          child: AbsorbPointer(
-            absorbing: _busy,
-            child: ListView(padding: const EdgeInsets.all(16), children: [
-              Center(child: PlateText(_t.displayPlate, size: 26)),
-              const SizedBox(height: 8),
-              if (active.isNotEmpty)
-                Card(
-                  color: Colors.purple.shade50,
-                  child: ListTile(
-                    leading: const Icon(Icons.card_membership, color: Colors.purple),
-                    title: Text('${active.first.passType} active until ${active.first.endsOn ?? dateIst(active.first.endsAt)}'),
-                    subtitle: const Text('A renewal starts when the current pass ends.'),
+      body: Column(
+        children: [
+          const ConnectivityBar(),
+          Expanded(
+            child: AbsorbPointer(
+              absorbing: _busy,
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  Center(child: PlateText(_t.displayPlate, size: 26)),
+                  const SizedBox(height: 8),
+                  if (active.isNotEmpty)
+                    Card(
+                      color: Colors.purple.shade50,
+                      child: ListTile(
+                        leading: const Icon(Icons.card_membership, color: Colors.purple),
+                        title: Text(
+                          '${active.first.passType} active until ${active.first.endsOn ?? dateIst(active.first.endsAt)}',
+                        ),
+                        subtitle: const Text('A renewal starts when the current pass ends.'),
+                      ),
+                    )
+                  else
+                    const Text(
+                      'Pass holders park with zero interaction: entry and exit are recognised automatically.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.black54),
+                    ),
+                  const SectionTitle('Pass type'),
+                  if (types.isEmpty) const Text('No pass types for this vehicle class.'),
+                  for (final t in types)
+                    Card(
+                      shape: RoundedRectangleBorder(
+                        side: BorderSide(color: _type?.id == t.id ? upiBlue : Colors.transparent, width: 2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: ListTile(
+                        onTap: () => setState(() => _type = t),
+                        leading: Icon(
+                          _type?.id == t.id ? Icons.radio_button_checked : Icons.radio_button_off,
+                          color: upiBlue,
+                        ),
+                        title: Text(t.name, style: const TextStyle(fontWeight: FontWeight.w700)),
+                        subtitle: Text('${t.periodValue} ${t.periodUnit.toLowerCase()}${t.periodValue > 1 ? 's' : ''}'),
+                        trailing: Text(
+                          rupees(t.pricePaise),
+                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ),
+                  if (r != null) ...[
+                    const SectionTitle('Amount'),
+                    MoneyRow(r.passName ?? 'Pass', r.basePaise),
+                    if (r.duesPaise > 0) MoneyRow('Previous dues', r.duesPaise, color: dueRed, bold: true),
+                    const Divider(),
+                    MoneyRow('Total', r.amountPaise, bold: true, size: 24),
+                  ],
+                  const SectionTitle('Customer mobile (for receipt & renewal reminders)'),
+                  TextField(
+                    controller: _phone,
+                    keyboardType: TextInputType.phone,
+                    decoration: InputDecoration(
+                      prefixText: '+91 ',
+                      border: const OutlineInputBorder(),
+                      helperText: _t.phoneKnown ? 'A number is already on file for this vehicle' : null,
+                    ),
+                    onChanged: (_) => setState(() {}),
                   ),
-                )
-              else
-                const Text('Pass holders park with zero interaction: entry and exit are recognised automatically.',
-                    textAlign: TextAlign.center, style: TextStyle(color: Colors.black54)),
-              const SectionTitle('Pass type'),
-              if (types.isEmpty) const Text('No pass types for this vehicle class.'),
-              for (final t in types)
-                Card(
-                  shape: RoundedRectangleBorder(
-                      side: BorderSide(color: _type?.id == t.id ? upiBlue : Colors.transparent, width: 2),
-                      borderRadius: BorderRadius.circular(12)),
-                  child: ListTile(
-                    onTap: () => setState(() => _type = t),
-                    leading: Icon(_type?.id == t.id ? Icons.radio_button_checked : Icons.radio_button_off, color: upiBlue),
-                    title: Text(t.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-                    subtitle: Text('${t.periodValue} ${t.periodUnit.toLowerCase()}${t.periodValue > 1 ? 's' : ''}'),
-                    trailing: Text(rupees(t.pricePaise), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-                  ),
-                ),
-              if (r != null) ...[
-                const SectionTitle('Amount'),
-                MoneyRow(r.passName ?? 'Pass', r.basePaise),
-                if (r.duesPaise > 0) MoneyRow('Previous dues', r.duesPaise, color: dueRed, bold: true),
-                const Divider(),
-                MoneyRow('Total', r.amountPaise, bold: true, size: 24),
-              ],
-              const SectionTitle('Customer mobile (for receipt & renewal reminders)'),
-              TextField(
-                controller: _phone,
-                keyboardType: TextInputType.phone,
-                decoration: InputDecoration(
-                  prefixText: '+91 ',
-                  border: const OutlineInputBorder(),
-                  helperText: _t.phoneKnown ? 'A number is already on file for this vehicle' : null,
-                ),
-                onChanged: (_) => setState(() {}),
+                  const SizedBox(height: 20),
+                  if (r != null) ...[
+                    BigButton(
+                      label: 'UPI  ${rupees(r.payablePaise)}',
+                      icon: Icons.qr_code_2,
+                      color: upiBlue,
+                      height: 64,
+                      onPressed: _upi,
+                    ),
+                    const SizedBox(height: 10),
+                    BigButton(
+                      label: cashOk
+                          ? 'Cash  ${rupees(r.payablePaise)}'
+                          : (app.cashAllowed ? 'Cash blocked — hand over first' : 'Cash is off'),
+                      icon: Icons.payments,
+                      outlined: true,
+                      color: cashOk ? paidGreen : Colors.grey,
+                      onPressed: cashOk ? _cash : null,
+                    ),
+                  ],
+                ],
               ),
-              const SizedBox(height: 20),
-              if (r != null) ...[
-                BigButton(label: 'UPI  ${rupees(r.payablePaise)}', icon: Icons.qr_code_2, color: upiBlue, height: 64, onPressed: _upi),
-                const SizedBox(height: 10),
-                BigButton(
-                  label: cashOk ? 'Cash  ${rupees(r.payablePaise)}' : (app.cashAllowed ? 'Cash blocked — hand over first' : 'Cash is off'),
-                  icon: Icons.payments,
-                  outlined: true,
-                  color: cashOk ? paidGreen : Colors.grey,
-                  onPressed: cashOk ? _cash : null,
-                ),
-              ],
-            ]),
+            ),
           ),
-        ),
-      ]),
+        ],
+      ),
     );
   }
 }

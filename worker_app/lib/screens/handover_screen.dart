@@ -43,7 +43,13 @@ class _HandoverScreenState extends State<HandoverScreen> {
     } on NetworkException {
       await app.enqueue(
         SyncType.handover,
-        {'amount_paise': total, 'denominations': {for (final e in _counts.entries) if (e.value > 0) '${e.key}': e.value}},
+        {
+          'amount_paise': total,
+          'denominations': {
+            for (final e in _counts.entries)
+              if (e.value > 0) '${e.key}': e.value,
+          },
+        },
         clientUuid: _uuid,
         label: 'Handover ${rupees(total)}',
       );
@@ -62,24 +68,34 @@ class _HandoverScreenState extends State<HandoverScreen> {
     final total = denominationTotalPaise(_counts);
     return Scaffold(
       appBar: AppBar(title: const Text('Cash handover')),
-      body: Column(children: [
-        const ConnectivityBar(),
-        Expanded(
-          child: ListView(padding: const EdgeInsets.all(16), children: [
-            Text('Cash in hand: ${rupees(app.cashPosition.heldPaise)}',
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-            const Text('Count your notes and coins. The total is added up for you.', style: TextStyle(color: Colors.black54)),
-            const SizedBox(height: 12),
-            DenominationGrid(counts: _counts, onChanged: (m) => setState(() => _counts = m)),
-            const SizedBox(height: 20),
-            BigButton(
-              label: _busy ? 'Sending…' : 'Declare ${rupees(total)}',
-              icon: Icons.handshake,
-              onPressed: total <= 0 || _busy ? null : _submit,
+      body: Column(
+        children: [
+          const ConnectivityBar(),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                Text(
+                  'Cash in hand: ${rupees(app.cashPosition.heldPaise)}',
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                ),
+                const Text(
+                  'Count your notes and coins. The total is added up for you.',
+                  style: TextStyle(color: Colors.black54),
+                ),
+                const SizedBox(height: 12),
+                DenominationGrid(counts: _counts, onChanged: (m) => setState(() => _counts = m)),
+                const SizedBox(height: 20),
+                BigButton(
+                  label: _busy ? 'Sending…' : 'Declare ${rupees(total)}',
+                  icon: Icons.handshake,
+                  onPressed: total <= 0 || _busy ? null : _submit,
+                ),
+              ],
             ),
-          ]),
-        ),
-      ]),
+          ),
+        ],
+      ),
     );
   }
 }

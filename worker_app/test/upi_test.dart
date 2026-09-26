@@ -44,7 +44,13 @@ void main() {
 
   test('upi intent URI identical to backend', () {
     expect(
-      upiIntentUri(vpa: 'parking@upi', payee: 'Station Parking', amountPaise: 4500, txnRef: 'PS2N9XA1B2C3', note: 'Parking MH43AB1234'),
+      upiIntentUri(
+        vpa: 'parking@upi',
+        payee: 'Station Parking',
+        amountPaise: 4500,
+        txnRef: 'PS2N9XA1B2C3',
+        note: 'Parking MH43AB1234',
+      ),
       'upi://pay?pa=parking%40upi&pn=Station%20Parking&am=45.00&cu=INR&tr=PS2N9XA1B2C3&tn=Parking%20MH43AB1234',
     );
     expect(
@@ -61,11 +67,24 @@ void main() {
 
   group('PayRequest payloads', () {
     const target = CollectTarget(
-        vehicleId: 9, plate: 'MH43AB1234', displayPlate: 'MH 43 AB 1234', vehicleClass: 'BIKE', sessionId: 77, duesPaise: 1500);
+      vehicleId: 9,
+      plate: 'MH43AB1234',
+      displayPlate: 'MH 43 AB 1234',
+      vehicleClass: 'BIKE',
+      sessionId: 77,
+      duesPaise: 1500,
+    );
 
     test('session: txn ref encodes the session id', () {
       const r = PayRequest(
-          purpose: PayPurpose.session, target: target, basePaise: 2000, duesPaise: 1500, creditPaise: 0, amountPaise: 3500, durationMinutes: 240);
+        purpose: PayPurpose.session,
+        target: target,
+        basePaise: 2000,
+        duesPaise: 1500,
+        creditPaise: 0,
+        amountPaise: 3500,
+        durationMinutes: 240,
+      );
       expect(parseTxnRef(r.newTxnRef()), ('S', 77));
       final d = r.syncData(phone: '9876543210', txnRef: 'PS25X000000');
       expect(d, {
@@ -87,7 +106,14 @@ void main() {
 
     test('override fields only when the amount differs', () {
       const r = PayRequest(
-          purpose: PayPurpose.session, target: target, basePaise: 2000, duesPaise: 0, creditPaise: 0, amountPaise: 2000, durationMinutes: 240);
+        purpose: PayPurpose.session,
+        target: target,
+        basePaise: 2000,
+        duesPaise: 0,
+        creditPaise: 0,
+        amountPaise: 2000,
+        durationMinutes: 240,
+      );
       final o = r.withOverride(1000, 'regular customer', '4321');
       expect(o.payablePaise, 1000);
       final b = o.paymentBody(clientUuid: 'u2');
@@ -99,14 +125,33 @@ void main() {
 
     test('pass and dues use the vehicle id in the txn ref', () {
       const p = PayRequest(
-          purpose: PayPurpose.pass, target: target, basePaise: 50000, duesPaise: 1500, creditPaise: 0, amountPaise: 51500, passTypeId: 3);
+        purpose: PayPurpose.pass,
+        target: target,
+        basePaise: 50000,
+        duesPaise: 1500,
+        creditPaise: 0,
+        amountPaise: 51500,
+        passTypeId: 3,
+      );
       expect(parseTxnRef(p.newTxnRef()), ('V', 9));
       expect(p.syncData()['pass_type_id'], 3);
       expect(p.syncData().containsKey('session_id'), isFalse);
       expect(p.passSellBody(mode: 'CASH', clientUuid: 'u')['vehicle_id'], 9);
-      const newPlate = CollectTarget(vehicleId: 0, plate: 'KA01AB1234', displayPlate: 'KA 01 AB 1234', vehicleClass: 'BIKE');
+      const newPlate = CollectTarget(
+        vehicleId: 0,
+        plate: 'KA01AB1234',
+        displayPlate: 'KA 01 AB 1234',
+        vehicleClass: 'BIKE',
+      );
       const p2 = PayRequest(
-          purpose: PayPurpose.pass, target: newPlate, basePaise: 50000, duesPaise: 0, creditPaise: 0, amountPaise: 50000, passTypeId: 3);
+        purpose: PayPurpose.pass,
+        target: newPlate,
+        basePaise: 50000,
+        duesPaise: 0,
+        creditPaise: 0,
+        amountPaise: 50000,
+        passTypeId: 3,
+      );
       expect(p2.passSellBody(mode: 'UPI', clientUuid: 'u')['plate'], 'KA01AB1234');
     });
   });

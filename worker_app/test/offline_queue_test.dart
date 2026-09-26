@@ -40,17 +40,29 @@ void main() {
   tearDown(() async => store.close());
 
   Future<QueueItem> cash(int paise, {int session = 1, int user = 5}) => store.enqueue(
-        type: SyncType.cash,
-        data: {'session_id': session, 'vehicle_id': 10 + session, 'duration_minutes': 240, 'dues_paise': 0, 'amount_paise': paise},
-        userId: user,
-        amountPaise: paise,
-      );
+    type: SyncType.cash,
+    data: {
+      'session_id': session,
+      'vehicle_id': 10 + session,
+      'duration_minutes': 240,
+      'dues_paise': 0,
+      'amount_paise': paise,
+    },
+    userId: user,
+    amountPaise: paise,
+  );
 
   group('LocalStore', () {
     test('enqueue keeps order, is idempotent on client_uuid', () async {
       final a = await cash(2000, session: 1);
       final b = await cash(3000, session: 2);
-      final again = await store.enqueue(type: SyncType.cash, data: {'x': 1}, userId: 5, clientUuid: a.clientUuid, amountPaise: 999);
+      final again = await store.enqueue(
+        type: SyncType.cash,
+        data: {'x': 1},
+        userId: 5,
+        clientUuid: a.clientUuid,
+        amountPaise: 999,
+      );
       expect(again.id, a.id);
       expect(again.amountPaise, 2000);
       final pending = await store.pending(userId: 5);
@@ -89,10 +101,16 @@ void main() {
     });
 
     test('cache round trip', () async {
-      await store.putCache('bootstrap', {'a': 1, 'list': [1, 2]});
-      expect(await store.getCache<Map<String, dynamic>>('bootstrap'), {'a': 1, 'list': [1, 2]});
+      await store.putCache('bootstrap', {
+        'a': 1,
+        'list': [1, 2],
+      });
+      expect(await store.getCache<Map<String, dynamic>>('bootstrap'), {
+        'a': 1,
+        'list': [1, 2],
+      });
       await store.putCache('collect', [
-        {'session_id': 1}
+        {'session_id': 1},
       ]);
       expect((await store.getCache<List<dynamic>>('collect'))!.length, 1);
       expect(await store.getCache<Map<String, dynamic>>('missing'), isNull);
@@ -127,9 +145,11 @@ void main() {
     test('per-item error marks only that item failed', () async {
       final a = await cash(2000, session: 1);
       final b = await cash(9999, session: 2);
-      final t = FakeTransport((i) => i['client_uuid'] == b.clientUuid
-          ? {'client_uuid': i['client_uuid'], 'ok': false, 'error': 'amount does not match tariff'}
-          : okRule(i));
+      final t = FakeTransport(
+        (i) => i['client_uuid'] == b.clientUuid
+            ? {'client_uuid': i['client_uuid'], 'ok': false, 'error': 'amount does not match tariff'}
+            : okRule(i),
+      );
       final s = SyncService(store, t, userId: 5);
       final out = await s.flush();
       expect(out.ok, 1);

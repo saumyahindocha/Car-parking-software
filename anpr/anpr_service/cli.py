@@ -44,8 +44,10 @@ def cmd_replay(args: argparse.Namespace) -> int:
     videos = resolve_videos(cfg, _parse_videos(args.video))
     if args.inline:
         from .runner import InlineReplayRunner
-        from .service import build_sink
+        from .service import build_sink, refresh_config
 
+        if cfg.backend.url:
+            cfg = refresh_config(cfg)
         sink, _backend = build_sink(cfg)
         if sink is None:
             log.warning("no backend.url / events_jsonl configured: events stay in %s", cfg.outbox_path)
@@ -68,7 +70,7 @@ def cmd_synth(args: argparse.Namespace) -> int:
     width, height = (2560, 1440) if args.full_res else (args.width, args.height)
     cfg_path = generate(args.out, gates=args.gates, width=width, height=height, fps=args.fps,
                         compact=args.compact, overview=not args.no_overview, ext=args.ext, seed=args.seed,
-                        wrong_way=args.wrong_way)
+                        wrong_way=args.wrong_way, exit_delay_s=args.exit_delay)
     print(f"synthetic clips + ground_truth.json written under {Path(args.out).resolve()}")
     print(f"replay with:  python -m anpr_service replay --config {cfg_path}")
     print(f"evaluate:     python -m anpr_service evaluate --labels {Path(args.out).resolve()}")
@@ -125,7 +127,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("synth", help="generate synthetic replay videos with ground truth")
     s.add_argument("--out", default="demo")
-    s.add_argument("--gates", nargs="+", default=["G1", "G2"])
+    s.add_argument("--gates", nargs="+", default=["G1", "G2"],
+                   help="first gate = entry (IN), others = exit (OUT) with the same plates leaving")
+    s.add_argument("--exit-delay", type=float, default=8.0,
+                   help="seconds between a vehicle entering and the same vehicle exiting")
     s.add_argument("--width", type=int, default=1280)
     s.add_argument("--height", type=int, default=720)
     s.add_argument("--full-res", action="store_true", help="2560x1440 like the 4 MP ANPR cameras")
@@ -134,7 +139,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--no-overview", action="store_true")
     s.add_argument("--ext", choices=[".mp4", ".avi"], default=".mp4")
     s.add_argument("--seed", type=int, default=7)
-    s.add_argument("--wrong-way", action="store_true", help="add a bike riding the wrong way at the end")
+    s.add_argument("--wrong-way", action="store_true", help="add a bike riding the wrong way through the entry gate")
     s.set_defaults(func=cmd_synth)
 
     e = sub.add_parser("evaluate", help="accuracy / read-rate report over labelled clips")

@@ -34,8 +34,8 @@ class NetworkException implements Exception {
 /// [onReachability] so the UI can show online/offline without extra pings.
 class ApiClient {
   ApiClient({required String baseUrl, this.token, http.Client? client, this.timeout = const Duration(seconds: 8)})
-      : baseUrl = _clean(baseUrl),
-        _http = client ?? http.Client();
+    : baseUrl = _clean(baseUrl),
+      _http = client ?? http.Client();
 
   String baseUrl;
   String? token;
@@ -86,16 +86,18 @@ class ApiClient {
   }
 
   Map<String, String> get _headers => {
-        'Accept': 'application/json',
-        if (token != null) 'Authorization': 'Bearer $token',
-      };
+    'Accept': 'application/json',
+    if (token != null) 'Authorization': 'Bearer $token',
+  };
 
   Future<dynamic> get(String path, {Map<String, dynamic>? query, Duration? timeout}) =>
       _send(() => _http.get(uri(path, query), headers: _headers), timeout);
 
   Future<dynamic> post(String path, [Object? body, Duration? timeout]) => _send(
-      () => _http.post(uri(path), headers: {..._headers, 'Content-Type': 'application/json'}, body: jsonEncode(body ?? {})),
-      timeout);
+    () =>
+        _http.post(uri(path), headers: {..._headers, 'Content-Type': 'application/json'}, body: jsonEncode(body ?? {})),
+    timeout,
+  );
 
   /// Multipart form POST (handover confirm with photo, bank deposit with slip).
   Future<dynamic> multipart(String path, {required Map<String, String> fields, required Map<String, File> files}) {
@@ -156,8 +158,9 @@ class ApiClient {
   }
 
   // ------------------------------------------------------------------ typed calls
-  Future<Map<String, dynamic>> login(String username, String pin, String deviceId) async =>
-      Map<String, dynamic>.from(await post('/api/auth/login', {'username': username, 'pin': pin, 'device_id': deviceId}));
+  Future<Map<String, dynamic>> login(String username, String pin, String deviceId) async => Map<String, dynamic>.from(
+    await post('/api/auth/login', {'username': username, 'pin': pin, 'device_id': deviceId}),
+  );
 
   Future<bool> health() async {
     try {
@@ -174,7 +177,9 @@ class ApiClient {
       List<dynamic>.from(await get('/api/collect/list', query: {'zone_id': zoneId}));
 
   Future<List<VehicleInfo>> searchVehicles(String q) async =>
-      (await get('/api/vehicles/search', query: {'q': q}) as List).map((e) => VehicleInfo(Map<String, dynamic>.from(e))).toList();
+      (await get('/api/vehicles/search', query: {'q': q}) as List)
+          .map((e) => VehicleInfo(Map<String, dynamic>.from(e)))
+          .toList();
 
   Future<VehicleInfo> vehicle(int id) async => VehicleInfo(Map<String, dynamic>.from(await get('/api/vehicles/$id')));
 
@@ -184,7 +189,10 @@ class ApiClient {
       SessionInfo(Map<String, dynamic>.from(await post('/api/sessions/$sessionId/correct-plate', {'plate': plate})));
 
   Future<QuoteInfo> quote(int sessionId, int durationMinutes) async => QuoteInfo.fromJson(
-      Map<String, dynamic>.from(await get('/api/sessions/$sessionId/quote', query: {'duration_minutes': durationMinutes})));
+    Map<String, dynamic>.from(
+      await get('/api/sessions/$sessionId/quote', query: {'duration_minutes': durationMinutes}),
+    ),
+  );
 
   Future<PaymentInfo> payUpi(Map<String, dynamic> body) async =>
       PaymentInfo(Map<String, dynamic>.from(await post('/api/payments/upi', body)));
@@ -203,7 +211,8 @@ class ApiClient {
   Future<Map<String, dynamic>> receiptSend(String code, String phone) async =>
       Map<String, dynamic>.from(await post('/api/receipts/$code/send', {'phone': phone}));
 
-  Future<void> setContact(int vehicleId, String phone) async => post('/api/vehicles/$vehicleId/contact', {'phone': phone});
+  Future<void> setContact(int vehicleId, String phone) async =>
+      post('/api/vehicles/$vehicleId/contact', {'phone': phone});
 
   Future<PaymentInfo> sellPass(Map<String, dynamic> body) async =>
       PaymentInfo(Map<String, dynamic>.from(await post('/api/passes/sell', body)));
@@ -221,12 +230,18 @@ class ApiClient {
   Future<Map<String, dynamic>> closeShift({String? note}) async =>
       Map<String, dynamic>.from(await post('/api/shifts/close', {'note': note}));
 
-  Future<HandoverInfo> declareHandover(int amountPaise, Map<int, int> denoms, String clientUuid) async =>
-      HandoverInfo(Map<String, dynamic>.from(await post('/api/cash/handovers', {
+  Future<HandoverInfo> declareHandover(int amountPaise, Map<int, int> denoms, String clientUuid) async => HandoverInfo(
+    Map<String, dynamic>.from(
+      await post('/api/cash/handovers', {
         'amount_paise': amountPaise,
-        'denominations': {for (final e in denoms.entries) if (e.value > 0) '${e.key}': e.value},
+        'denominations': {
+          for (final e in denoms.entries)
+            if (e.value > 0) '${e.key}': e.value,
+        },
         'client_uuid': clientUuid,
-      })));
+      }),
+    ),
+  );
 
   Future<List<HandoverInfo>> myHandovers() async =>
       (await get('/api/cash/handovers/mine') as List).map((e) => HandoverInfo(Map<String, dynamic>.from(e))).toList();
@@ -254,13 +269,21 @@ class ApiClient {
           .map((e) => HandoverInfo(Map<String, dynamic>.from(e)))
           .toList();
 
-  Future<HandoverInfo> confirmHandover(int id, Map<int, int> counted, File photo, {String? note}) async =>
-      HandoverInfo(Map<String, dynamic>.from(await multipart('/api/cash/handovers/$id/confirm', fields: {
-        'counted_denominations': jsonEncode({for (final e in counted.entries) if (e.value > 0) '${e.key}': e.value}),
-        if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
-      }, files: {
-        'photo': photo
-      })));
+  Future<HandoverInfo> confirmHandover(int id, Map<int, int> counted, File photo, {String? note}) async => HandoverInfo(
+    Map<String, dynamic>.from(
+      await multipart(
+        '/api/cash/handovers/$id/confirm',
+        fields: {
+          'counted_denominations': jsonEncode({
+            for (final e in counted.entries)
+              if (e.value > 0) '${e.key}': e.value,
+          }),
+          if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+        },
+        files: {'photo': photo},
+      ),
+    ),
+  );
 
   Future<HandoverInfo> rejectHandover(int id, String note) async =>
       HandoverInfo(Map<String, dynamic>.from(await post('/api/cash/handovers/$id/reject', {'note': note})));
@@ -271,24 +294,31 @@ class ApiClient {
     required String slipRef,
     required File slipPhoto,
     String? note,
-  }) async =>
-      Map<String, dynamic>.from(await multipart('/api/cash/deposits', fields: {
+  }) async => Map<String, dynamic>.from(
+    await multipart(
+      '/api/cash/deposits',
+      fields: {
         'business_date': businessDate,
         'amount_paise': '$amountPaise',
         'slip_ref': slipRef,
         if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
-      }, files: {
-        'slip_photo': slipPhoto
-      }));
+      },
+      files: {'slip_photo': slipPhoto},
+    ),
+  );
 
   Future<List<dynamic>> deposits() async => List<dynamic>.from(await get('/api/cash/deposits'));
 
   Future<List<DisputeInfo>> disputes({String? status = 'OPEN'}) async =>
-      (await get('/api/disputes', query: {'status': status}) as List).map((e) => DisputeInfo(Map<String, dynamic>.from(e))).toList();
+      (await get('/api/disputes', query: {'status': status}) as List)
+          .map((e) => DisputeInfo(Map<String, dynamic>.from(e)))
+          .toList();
 
-  Future<DisputeInfo> resolveDispute(int id, String outcome, String note, {int? adjustPaise}) async =>
-      DisputeInfo(Map<String, dynamic>.from(
-          await post('/api/disputes/$id/resolve', {'outcome': outcome, 'note': note, 'adjust_paise': adjustPaise})));
+  Future<DisputeInfo> resolveDispute(int id, String outcome, String note, {int? adjustPaise}) async => DisputeInfo(
+    Map<String, dynamic>.from(
+      await post('/api/disputes/$id/resolve', {'outcome': outcome, 'note': note, 'adjust_paise': adjustPaise}),
+    ),
+  );
 
   Future<List<ZoneInfo>> zones() async =>
       (await get('/api/zones') as List).map((e) => ZoneInfo.fromJson(Map<String, dynamic>.from(e))).toList();
@@ -298,14 +328,19 @@ class ApiClient {
           .map((e) => ZoneAssignmentInfo(Map<String, dynamic>.from(e)))
           .toList();
 
-  Future<void> assignZone({required int zoneId, required int userId, required DateTime startsAt, required DateTime endsAt, String shiftLabel = ''}) =>
-      post('/api/zones/assignments', {
-        'zone_id': zoneId,
-        'user_id': userId,
-        'starts_at': startsAt.toUtc().toIso8601String(),
-        'ends_at': endsAt.toUtc().toIso8601String(),
-        'shift_label': shiftLabel,
-      });
+  Future<void> assignZone({
+    required int zoneId,
+    required int userId,
+    required DateTime startsAt,
+    required DateTime endsAt,
+    String shiftLabel = '',
+  }) => post('/api/zones/assignments', {
+    'zone_id': zoneId,
+    'user_id': userId,
+    'starts_at': startsAt.toUtc().toIso8601String(),
+    'ends_at': endsAt.toUtc().toIso8601String(),
+    'shift_label': shiftLabel,
+  });
 
   Future<List<UserInfo>> users() async =>
       (await get('/api/users') as List).map((e) => UserInfo.fromJson(Map<String, dynamic>.from(e))).toList();
@@ -314,5 +349,8 @@ class ApiClient {
       PaymentInfo(Map<String, dynamic>.from(await post('/api/payments/$paymentId/reverse', {'reason': reason})));
 
   Future<PaymentInfo> refundUpi(int paymentId, String reason, {int? amountPaise}) async => PaymentInfo(
-      Map<String, dynamic>.from(await post('/api/payments/$paymentId/refund', {'reason': reason, 'amount_paise': amountPaise})));
+    Map<String, dynamic>.from(
+      await post('/api/payments/$paymentId/refund', {'reason': reason, 'amount_paise': amountPaise}),
+    ),
+  );
 }

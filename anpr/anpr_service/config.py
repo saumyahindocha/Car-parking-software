@@ -58,6 +58,12 @@ class BackendConfig(_Model):
     events_path: str = "/api/anpr/events"
     heartbeat_path: str = "/api/devices/heartbeat"
     config_path: str = "/api/anpr/config"
+    # Who owns camera geometry (roi, capture_line, in_vector)?
+    #   prefer_local   - YAML geometry wins whenever the YAML camera has a capture_line;
+    #                    the backend's is used only for cameras without local geometry.
+    #   prefer_backend - non-empty backend geometry wins (geometry edited in the admin UI).
+    # Gate direction and merge/dedupe settings ALWAYS come from the backend when it answers.
+    geometry: Literal["prefer_local", "prefer_backend"] = "prefer_local"
 
 
 class TrackerConfig(_Model):
@@ -307,16 +313,19 @@ def _deep_merge(base: dict[str, Any], extra: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-_REMOTE_CAMERA_FIELDS = ("role", "rtsp_url", "roi", "capture_line", "in_vector", "gate_span", "side", "enabled")
+_REMOTE_CAMERA_FIELDS = ("role", "rtsp_url", "side", "enabled")
+_GEOMETRY_FIELDS = ("roi", "capture_line", "in_vector")
 
 
 def apply_remote_config(cfg: ServiceConfig, remote: dict[str, Any]) -> ServiceConfig:
     """Overlay the backend's ``/api/anpr/config`` answer onto the local config.
 
-    Remote values win for the fields the backend owns (gate direction/name,
-    camera URL/ROI/line/in_vector/role, merge/dedupe settings).  Local-only
-    fields (replay files, GStreamer pipelines, gate spans...) are kept.
-    Cameras or gates only present remotely are added.
+    Remote values win for gate direction/name (the backend resolves
+    time-of-day schedules), camera URL/role, merge/dedupe/confidence settings
+    and state codes.  Camera geometry (roi, capture_line, in_vector) follows
+    ``backend.geometry`` (default: YAML wins when it defines a capture line).
+    Local-only fields (replay files, GStreamer pipelines, gate spans...) are
+    kept.  Cameras or gates only present remotely are added.
     """
     data = cfg.model_dump(mode="json")
     gates_by_id = {g["id"]: g for g in data["gates"]}
@@ -344,10 +353,19 @@ def apply_remote_config(cfg: ServiceConfig, remote: dict[str, Any]) -> ServiceCo
                 g["cameras"].append(c)
                 cams_by_id[cid] = c
             for f in _REMOTE_CAMERA_FIELDS:
-                if rc.get(f) is not None:
+                if rc.get(f) not in (None, ""):
                     c[f] = rc[f]
+            remote_has_geometry = bool(rc.get("capture_line"))
+            local_has_geometry = bool(c.get("capture_line"))
+            if remote_has_geometry and (not local_has_geometry or cfg.backend.geometry == "prefer_backend"):
+                for f in _GEOMETRY_FIELDS:
+                    if rc.get(f):
+                        c[f] = rc[f]
     remote_settings = remote.get("settings") or {}
     for k, v in remote_settings.items():
         if k in Settings.model_fields and v is not None:
             data["settings"][k] = v
+    codes = remote_settings.get("state_codes")
+    if isinstance(codes, list) and codes:
+        data["plates"]["state_codes"] = [str(x).upper() for x in codes]
     return ServiceConfig.model_validate(data)

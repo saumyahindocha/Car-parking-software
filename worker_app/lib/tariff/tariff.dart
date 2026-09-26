@@ -72,58 +72,57 @@ class Tariff {
     int? overnightPaise,
     int? overnightCutoffHour,
     int? freeMinutes,
-  }) =>
-      Tariff(
-        id: id,
-        vehicleClass: vehicleClass,
-        effectiveFrom: effectiveFrom ?? _effectiveFrom,
-        version: version ?? this.version,
-        firstSlabMinutes: firstSlabMinutes,
-        firstSlabPaise: firstSlabPaise ?? this.firstSlabPaise,
-        perHourPaise: perHourPaise,
-        graceMinutes: graceMinutes,
-        blockMinutes: blockMinutes ?? this.blockMinutes,
-        blockCapPaise: clearBlockCap ? null : (blockCapPaise ?? this.blockCapPaise),
-        dailyCapPaise: dailyCapPaise ?? this.dailyCapPaise,
-        overnightPaise: overnightPaise ?? this.overnightPaise,
-        overnightCutoffHour: overnightCutoffHour ?? this.overnightCutoffHour,
-        freeMinutes: freeMinutes ?? this.freeMinutes,
-      );
+  }) => Tariff(
+    id: id,
+    vehicleClass: vehicleClass,
+    effectiveFrom: effectiveFrom ?? _effectiveFrom,
+    version: version ?? this.version,
+    firstSlabMinutes: firstSlabMinutes,
+    firstSlabPaise: firstSlabPaise ?? this.firstSlabPaise,
+    perHourPaise: perHourPaise,
+    graceMinutes: graceMinutes,
+    blockMinutes: blockMinutes ?? this.blockMinutes,
+    blockCapPaise: clearBlockCap ? null : (blockCapPaise ?? this.blockCapPaise),
+    dailyCapPaise: dailyCapPaise ?? this.dailyCapPaise,
+    overnightPaise: overnightPaise ?? this.overnightPaise,
+    overnightCutoffHour: overnightCutoffHour ?? this.overnightCutoffHour,
+    freeMinutes: freeMinutes ?? this.freeMinutes,
+  );
 
   /// From the `/api/bootstrap` `tariffs[]` JSON.
   factory Tariff.fromJson(Map<String, dynamic> j) => Tariff(
-        id: (j['id'] as num?)?.toInt(),
-        vehicleClass: j['vehicle_class'] as String? ?? 'BIKE',
-        version: (j['version'] as num?)?.toInt() ?? 1,
-        effectiveFrom: j['effective_from'] == null ? null : DateTime.parse(j['effective_from'] as String),
-        firstSlabMinutes: (j['first_slab_minutes'] as num?)?.toInt() ?? 120,
-        firstSlabPaise: (j['first_slab_paise'] as num?)?.toInt() ?? 0,
-        perHourPaise: (j['per_hour_paise'] as num?)?.toInt() ?? 0,
-        graceMinutes: (j['grace_minutes'] as num?)?.toInt() ?? 0,
-        blockMinutes: (j['block_minutes'] as num?)?.toInt() ?? 0,
-        blockCapPaise: (j['block_cap_paise'] as num?)?.toInt(),
-        dailyCapPaise: (j['daily_cap_paise'] as num?)?.toInt(),
-        overnightPaise: (j['overnight_paise'] as num?)?.toInt() ?? 0,
-        overnightCutoffHour: (j['overnight_cutoff_hour'] as num?)?.toInt() ?? 0,
-        freeMinutes: (j['free_minutes'] as num?)?.toInt() ?? 0,
-      );
+    id: (j['id'] as num?)?.toInt(),
+    vehicleClass: j['vehicle_class'] as String? ?? 'BIKE',
+    version: (j['version'] as num?)?.toInt() ?? 1,
+    effectiveFrom: j['effective_from'] == null ? null : DateTime.parse(j['effective_from'] as String),
+    firstSlabMinutes: (j['first_slab_minutes'] as num?)?.toInt() ?? 120,
+    firstSlabPaise: (j['first_slab_paise'] as num?)?.toInt() ?? 0,
+    perHourPaise: (j['per_hour_paise'] as num?)?.toInt() ?? 0,
+    graceMinutes: (j['grace_minutes'] as num?)?.toInt() ?? 0,
+    blockMinutes: (j['block_minutes'] as num?)?.toInt() ?? 0,
+    blockCapPaise: (j['block_cap_paise'] as num?)?.toInt(),
+    dailyCapPaise: (j['daily_cap_paise'] as num?)?.toInt(),
+    overnightPaise: (j['overnight_paise'] as num?)?.toInt() ?? 0,
+    overnightCutoffHour: (j['overnight_cutoff_hour'] as num?)?.toInt() ?? 0,
+    freeMinutes: (j['free_minutes'] as num?)?.toInt() ?? 0,
+  );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'vehicle_class': vehicleClass,
-        'version': version,
-        'effective_from': effectiveFrom.toUtc().toIso8601String(),
-        'first_slab_minutes': firstSlabMinutes,
-        'first_slab_paise': firstSlabPaise,
-        'per_hour_paise': perHourPaise,
-        'grace_minutes': graceMinutes,
-        'block_minutes': blockMinutes,
-        'block_cap_paise': blockCapPaise,
-        'daily_cap_paise': dailyCapPaise,
-        'overnight_paise': overnightPaise,
-        'overnight_cutoff_hour': overnightCutoffHour,
-        'free_minutes': freeMinutes,
-      };
+    'id': id,
+    'vehicle_class': vehicleClass,
+    'version': version,
+    'effective_from': effectiveFrom.toUtc().toIso8601String(),
+    'first_slab_minutes': firstSlabMinutes,
+    'first_slab_paise': firstSlabPaise,
+    'per_hour_paise': perHourPaise,
+    'grace_minutes': graceMinutes,
+    'block_minutes': blockMinutes,
+    'block_cap_paise': blockCapPaise,
+    'daily_cap_paise': dailyCapPaise,
+    'overnight_paise': overnightPaise,
+    'overnight_cutoff_hour': overnightCutoffHour,
+    'free_minutes': freeMinutes,
+  };
 }
 
 /// Python `divmod(x, y)` for non-negative doubles: (floor(x / y), remainder).
@@ -258,8 +257,13 @@ LocalQuote localSessionQuote({
   Duration tzOffset = istOffset,
 }) {
   final t = tariffFor(tariffs, vehicleClass, entryAt);
-  final base = calculateCharge(vehicleClass, entryAt, entryAt.add(Duration(minutes: durationMinutes)), t,
-      tzOffset: tzOffset);
+  final base = calculateCharge(
+    vehicleClass,
+    entryAt,
+    entryAt.add(Duration(minutes: durationMinutes)),
+    t,
+    tzOffset: tzOffset,
+  );
   final amount = base + duesPaise - creditPaise;
   return LocalQuote(
     basePaise: base,

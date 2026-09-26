@@ -72,48 +72,73 @@ class _HoldingsScreenState extends State<HoldingsScreen> {
     final boot = context.watch<AppState>().bootstrap;
     return Scaffold(
       appBar: AppBar(title: const Text('Cash in hand — all workers')),
-      body: Column(children: [
-        const ConnectivityBar(),
-        if (_error != null) Padding(padding: const EdgeInsets.all(8), child: Text(_error!, style: const TextStyle(color: dueRed))),
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: _load,
-            child: _rows == null
-                ? ListView(children: const [Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator()))])
-                : rows.isEmpty
-                    ? ListView(children: const [EmptyState('No open shifts')])
-                    : ListView.builder(
-                        itemCount: rows.length,
-                        itemBuilder: (c, i) {
-                          final h = rows[i];
-                          final frac = h.limitPaise <= 0 ? 1.0 : (h.cashInHandPaise / h.limitPaise).clamp(0.0, 1.0);
-                          final color = h.blocked ? dueRed : (h.warn ? Colors.amber.shade800 : paidGreen);
-                          return Card(
-                            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                            child: Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                Row(children: [
-                                  Expanded(
-                                    child: Text(h.name ?? 'User ${h.userId}',
-                                        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
-                                  ),
-                                  Text(rupees(h.cashInHandPaise), style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: color)),
-                                ]),
+      body: Column(
+        children: [
+          const ConnectivityBar(),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.all(8),
+              child: Text(_error!, style: const TextStyle(color: dueRed)),
+            ),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _load,
+              child: _rows == null
+                  ? ListView(
+                      children: const [
+                        Padding(
+                          padding: EdgeInsets.all(32),
+                          child: Center(child: CircularProgressIndicator()),
+                        ),
+                      ],
+                    )
+                  : rows.isEmpty
+                  ? ListView(children: const [EmptyState('No open shifts')])
+                  : ListView.builder(
+                      itemCount: rows.length,
+                      itemBuilder: (c, i) {
+                        final h = rows[i];
+                        final frac = h.limitPaise <= 0 ? 1.0 : (h.cashInHandPaise / h.limitPaise).clamp(0.0, 1.0);
+                        final color = h.blocked ? dueRed : (h.warn ? Colors.amber.shade800 : paidGreen);
+                        return Card(
+                          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        h.name ?? 'User ${h.userId}',
+                                        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                                      ),
+                                    ),
+                                    Text(
+                                      rupees(h.cashInHandPaise),
+                                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: color),
+                                    ),
+                                  ],
+                                ),
                                 const SizedBox(height: 6),
                                 LinearProgressIndicator(value: frac.toDouble(), color: color, minHeight: 8),
                                 const SizedBox(height: 4),
-                                Text('Limit ${rupees(h.limitPaise)}'
-                                    '${h.zoneId != null ? ' · ${boot?.zoneName(h.zoneId) ?? 'zone ${h.zoneId}'}' : ''}'
-                                    '${h.blocked ? ' · BLOCKED' : (h.warn ? ' · over 80%' : '')}'),
-                              ]),
+                                Text(
+                                  'Limit ${rupees(h.limitPaise)}'
+                                  '${h.zoneId != null ? ' · ${boot?.zoneName(h.zoneId) ?? 'zone ${h.zoneId}'}' : ''}'
+                                  '${h.blocked ? ' · BLOCKED' : (h.warn ? ' · over 80%' : '')}',
+                                ),
+                              ],
                             ),
-                          );
-                        },
-                      ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
           ),
-        ),
-      ]),
+        ],
+      ),
     );
   }
 }

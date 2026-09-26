@@ -122,12 +122,24 @@ void main() {
 
     test('duration buttons with dues and credit (mirrors payments.quote_session)', () {
       final ts = [Tariff.fromJson(json)];
-      final q = localSessionQuote(tariffs: ts, vehicleClass: 'BIKE', entryAt: e0, durationMinutes: 240, duesPaise: 1500);
+      final q = localSessionQuote(
+        tariffs: ts,
+        vehicleClass: 'BIKE',
+        entryAt: e0,
+        durationMinutes: 240,
+        duesPaise: 1500,
+      );
       expect(q.basePaise, 2000);
       expect(q.amountPaise, 3500);
       final full = localSessionQuote(tariffs: ts, vehicleClass: 'BIKE', entryAt: e0, durationMinutes: 1440);
       expect(full.amountPaise, 6000);
-      final credit = localSessionQuote(tariffs: ts, vehicleClass: 'BIKE', entryAt: e0, durationMinutes: 120, creditPaise: 1500);
+      final credit = localSessionQuote(
+        tariffs: ts,
+        vehicleClass: 'BIKE',
+        entryAt: e0,
+        durationMinutes: 120,
+        creditPaise: 1500,
+      );
       expect(credit.amountPaise, 0);
     });
   });

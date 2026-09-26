@@ -8,7 +8,9 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "demo-data": "python3 scripts/demo_data.py",
+    "smoke": "NODE_PATH=$(npm root -g) PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH:-/opt/pw-browsers} node scripts/smoke.cjs http://localhost:8000 docs/screenshots"
   },
   "dependencies": {
     "react": "^18.3.1",

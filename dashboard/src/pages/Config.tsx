@@ -133,7 +133,8 @@ function SettingField({ k, value, original, readOnly, users, onChange }: {
   if (k === 'cash_desk_user_ids') {
     const ids = (value as number[]) ?? [];
     return (
-      <Field label={label} hint="Only these users may record cash when “cash desk only” is on">
+      <div className="field">
+        <span>{label}</span>
         <div className={`chips ${cls}`}>
           {users
             .filter((u) => u.role !== 'GUARD')
@@ -145,7 +146,8 @@ function SettingField({ k, value, original, readOnly, users, onChange }: {
               </label>
             ))}
         </div>
-      </Field>
+        <small className="muted">Only these users may record cash when “cash desk only” is on</small>
+      </div>
     );
   }
   const commit = (t: string) => {

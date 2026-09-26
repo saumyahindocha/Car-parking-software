@@ -59,9 +59,16 @@ class PlateText extends StatelessWidget {
         border: Border.all(color: Colors.black87, width: 1.5),
         borderRadius: BorderRadius.circular(4),
       ),
-      child: Text(plate,
-          style: TextStyle(
-              fontFamily: 'monospace', fontWeight: FontWeight.w800, fontSize: size, letterSpacing: 1.2, color: Colors.black)),
+      child: Text(
+        plate,
+        style: TextStyle(
+          fontFamily: 'monospace',
+          fontWeight: FontWeight.w800,
+          fontSize: size,
+          letterSpacing: 1.2,
+          color: Colors.black,
+        ),
+      ),
     );
   }
 }
@@ -77,10 +84,16 @@ class Badge2 extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        if (icon != null) ...[Icon(icon, size: 12, color: color), const SizedBox(width: 3)],
-        Text(text, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w700)),
-      ]),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[Icon(icon, size: 12, color: color), const SizedBox(width: 3)],
+          Text(
+            text,
+            style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w700),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -113,12 +126,16 @@ class ConnectivityBar extends StatelessWidget {
         onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SyncStatusScreen())),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          child: Row(children: [
-            Icon(app.online ? Icons.sync : Icons.cloud_off, color: Colors.white, size: 16),
-            const SizedBox(width: 8),
-            Expanded(child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 13))),
-            const Icon(Icons.chevron_right, color: Colors.white, size: 16),
-          ]),
+          child: Row(
+            children: [
+              Icon(app.online ? Icons.sync : Icons.cloud_off, color: Colors.white, size: 16),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 13)),
+              ),
+              const Icon(Icons.chevron_right, color: Colors.white, size: 16),
+            ],
+          ),
         ),
       ),
     );
@@ -140,25 +157,35 @@ class CashLimitBanner extends StatelessWidget {
       color: blocked ? dueRed : Colors.amber.shade700,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        child: Row(children: [
-          Icon(blocked ? Icons.block : Icons.warning_amber, color: Colors.white, size: 18),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              blocked
-                  ? 'Cash limit reached (${rupees(pos.heldPaise)} / ${rupees(pos.limitPaise)}). Hand over cash — UPI still works.'
-                  : 'Cash in hand ${rupees(pos.heldPaise)} of ${rupees(pos.limitPaise)} limit. Hand over soon.',
-              style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+        child: Row(
+          children: [
+            Icon(blocked ? Icons.block : Icons.warning_amber, color: Colors.white, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                blocked
+                    ? 'Cash limit reached (${rupees(pos.heldPaise)} / ${rupees(pos.limitPaise)}). Hand over cash — UPI still works.'
+                    : 'Cash in hand ${rupees(pos.heldPaise)} of ${rupees(pos.limitPaise)} limit. Hand over soon.',
+                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+              ),
             ),
-          ),
-        ]),
+          ],
+        ),
       ),
     );
   }
 }
 
 class MoneyRow extends StatelessWidget {
-  const MoneyRow(this.label, this.paise, {super.key, this.color, this.bold = false, this.size = 16, this.negative = false});
+  const MoneyRow(
+    this.label,
+    this.paise, {
+    super.key,
+    this.color,
+    this.bold = false,
+    this.size = 16,
+    this.negative = false,
+  });
   final String label;
   final int paise;
   final Color? color;
@@ -171,10 +198,12 @@ class MoneyRow extends StatelessWidget {
     final style = TextStyle(fontSize: size, color: color, fontWeight: bold ? FontWeight.w800 : FontWeight.w500);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(children: [
-        Expanded(child: Text(label, style: style)),
-        Text('${negative ? '− ' : ''}${rupees(paise)}', style: style),
-      ]),
+      child: Row(
+        children: [
+          Expanded(child: Text(label, style: style)),
+          Text('${negative ? '− ' : ''}${rupees(paise)}', style: style),
+        ],
+      ),
     );
   }
 }
@@ -184,10 +213,12 @@ class SectionTitle extends StatelessWidget {
   final String text;
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(4, 16, 4, 6),
-        child: Text(text.toUpperCase(),
-            style: TextStyle(fontSize: 12, letterSpacing: 1, fontWeight: FontWeight.w700, color: Colors.grey.shade700)),
-      );
+    padding: const EdgeInsets.fromLTRB(4, 16, 4, 6),
+    child: Text(
+      text.toUpperCase(),
+      style: TextStyle(fontSize: 12, letterSpacing: 1, fontWeight: FontWeight.w700, color: Colors.grey.shade700),
+    ),
+  );
 }
 
 class EmptyState extends StatelessWidget {
@@ -196,13 +227,20 @@ class EmptyState extends StatelessWidget {
   final IconData icon;
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, size: 48, color: Colors.grey),
-          const SizedBox(height: 12),
-          Text(text, textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey, fontSize: 15)),
-        ]),
-      );
+    padding: const EdgeInsets.all(32),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 48, color: Colors.grey),
+        const SizedBox(height: 12),
+        Text(
+          text,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: Colors.grey, fontSize: 15),
+        ),
+      ],
+    ),
+  );
 }
 
 String errorText(Object e) {
@@ -221,7 +259,15 @@ void showError(BuildContext context, Object e) => showSnack(context, errorText(e
 
 /// A large, full-width action button (the app is used standing, one-handed).
 class BigButton extends StatelessWidget {
-  const BigButton({super.key, required this.label, required this.onPressed, this.icon, this.color, this.outlined = false, this.height = 60});
+  const BigButton({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.icon,
+    this.color,
+    this.outlined = false,
+    this.height = 60,
+  });
   final String label;
   final VoidCallback? onPressed;
   final IconData? icon;
@@ -231,10 +277,19 @@ class BigButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final child = Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-      if (icon != null) ...[Icon(icon, size: 26), const SizedBox(width: 10)],
-      Flexible(child: Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w700))),
-    ]);
+    final child = Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        if (icon != null) ...[Icon(icon, size: 26), const SizedBox(width: 10)],
+        Flexible(
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w700),
+          ),
+        ),
+      ],
+    );
     return SizedBox(
       width: double.infinity,
       height: height,
@@ -242,12 +297,16 @@ class BigButton extends StatelessWidget {
           ? OutlinedButton(
               onPressed: onPressed,
               style: OutlinedButton.styleFrom(
-                  foregroundColor: color, side: BorderSide(color: color ?? Colors.grey, width: 2)),
-              child: child)
+                foregroundColor: color,
+                side: BorderSide(color: color ?? Colors.grey, width: 2),
+              ),
+              child: child,
+            )
           : FilledButton(
               onPressed: onPressed,
               style: FilledButton.styleFrom(backgroundColor: color),
-              child: child),
+              child: child,
+            ),
     );
   }
 }

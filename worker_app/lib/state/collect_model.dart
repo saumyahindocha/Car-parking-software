@@ -29,7 +29,10 @@ class CollectModel extends ChangeNotifier {
 
   List<CollectItem> get items {
     final zone = app.bootstrap?.zone?.id;
-    final list = _all.where((i) => !_paidLocally.contains(i.sessionId)).where((i) => !onlyMyZone || zone == null || i.zoneId == zone).toList();
+    final list = _all
+        .where((i) => !_paidLocally.contains(i.sessionId))
+        .where((i) => !onlyMyZone || zone == null || i.zoneId == zone)
+        .toList();
     list.sort((a, b) => (b.entryAt ?? DateTime(0)).compareTo(a.entryAt ?? DateTime(0)));
     return list;
   }

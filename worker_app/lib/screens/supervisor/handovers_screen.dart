@@ -62,60 +62,78 @@ class _HandoversScreenState extends State<HandoversScreen> {
     final me = context.watch<AppState>().user;
     return Scaffold(
       appBar: AppBar(title: const Text('Cash handovers')),
-      body: Column(children: [
-        const ConnectivityBar(),
-        Padding(
-          padding: const EdgeInsets.all(8),
-          child: SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'PENDING', label: Text('Pending')),
-              ButtonSegment(value: 'CONFIRMED', label: Text('Confirmed')),
-              ButtonSegment(value: 'ALL', label: Text('All')),
-            ],
-            selected: {_status},
-            onSelectionChanged: (s) {
-              setState(() {
-                _status = s.first;
-                _rows = null;
-              });
-              _load();
-            },
+      body: Column(
+        children: [
+          const ConnectivityBar(),
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'PENDING', label: Text('Pending')),
+                ButtonSegment(value: 'CONFIRMED', label: Text('Confirmed')),
+                ButtonSegment(value: 'ALL', label: Text('All')),
+              ],
+              selected: {_status},
+              onSelectionChanged: (s) {
+                setState(() {
+                  _status = s.first;
+                  _rows = null;
+                });
+                _load();
+              },
+            ),
           ),
-        ),
-        if (_error != null) Text(_error!, style: const TextStyle(color: dueRed)),
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: _load,
-            child: _rows == null
-                ? ListView(children: const [Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator()))])
-                : _rows!.isEmpty
-                    ? ListView(children: const [EmptyState('No handovers')])
-                    : ListView(children: [
+          if (_error != null) Text(_error!, style: const TextStyle(color: dueRed)),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _load,
+              child: _rows == null
+                  ? ListView(
+                      children: const [
+                        Padding(
+                          padding: EdgeInsets.all(32),
+                          child: Center(child: CircularProgressIndicator()),
+                        ),
+                      ],
+                    )
+                  : _rows!.isEmpty
+                  ? ListView(children: const [EmptyState('No handovers')])
+                  : ListView(
+                      children: [
                         for (final h in _rows!)
                           Card(
                             margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                             child: ListTile(
-                              title: Text('${h.fromName} — ${rupees(h.declaredPaise)}',
-                                  style: const TextStyle(fontWeight: FontWeight.w700)),
-                              subtitle: Text([
-                                'Declared ${dateTimeIst(h.declaredAt)}',
-                                'system expected ${rupees(h.expectedPaise)}',
-                                if (h.countedPaise != null) 'counted ${rupees(h.countedPaise)}',
-                                if ((h.variancePaise ?? 0) != 0) 'variance ${rupees(h.variancePaise)}',
-                                h.status,
-                              ].join(' · ')),
-                              trailing: h.status == 'PENDING' && h.fromUser != me?.id ? const Icon(Icons.chevron_right) : null,
+                              title: Text(
+                                '${h.fromName} — ${rupees(h.declaredPaise)}',
+                                style: const TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                              subtitle: Text(
+                                [
+                                  'Declared ${dateTimeIst(h.declaredAt)}',
+                                  'system expected ${rupees(h.expectedPaise)}',
+                                  if (h.countedPaise != null) 'counted ${rupees(h.countedPaise)}',
+                                  if ((h.variancePaise ?? 0) != 0) 'variance ${rupees(h.variancePaise)}',
+                                  h.status,
+                                ].join(' · '),
+                              ),
+                              trailing: h.status == 'PENDING' && h.fromUser != me?.id
+                                  ? const Icon(Icons.chevron_right)
+                                  : null,
                               onTap: h.status == 'PENDING' && h.fromUser != me?.id
-                                  ? () => Navigator.of(context)
-                                      .push(MaterialPageRoute(builder: (_) => HandoverConfirmScreen(handover: h)))
-                                      .then((_) => _load())
+                                  ? () =>
+                                        Navigator.of(context)
+                                            .push(MaterialPageRoute(builder: (_) => HandoverConfirmScreen(handover: h)))
+                                            .then((_) => _load())
                                   : null,
                             ),
                           ),
-                      ]),
+                      ],
+                    ),
+            ),
           ),
-        ),
-      ]),
+        ],
+      ),
     );
   }
 }
@@ -152,9 +170,14 @@ class _HandoverConfirmScreenState extends State<HandoverConfirmScreen> {
       showSnack(context, 'Count differs from the declaration: add a note.', error: true);
       return;
     }
-    final ok = await confirmDialog(context, 'Confirm ${rupees(counted)} from ${h.fromName}?',
-        variance == 0 ? 'Matches the declaration.' : 'Variance ${rupees(variance)} will be logged against the worker\'s shift.',
-        ok: 'Confirm');
+    final ok = await confirmDialog(
+      context,
+      'Confirm ${rupees(counted)} from ${h.fromName}?',
+      variance == 0
+          ? 'Matches the declaration.'
+          : 'Variance ${rupees(variance)} will be logged against the worker\'s shift.',
+      ok: 'Confirm',
+    );
     if (!ok || !mounted) return;
     setState(() => _busy = true);
     try {
@@ -189,39 +212,61 @@ class _HandoverConfirmScreenState extends State<HandoverConfirmScreen> {
       appBar: AppBar(title: Text('Count: ${h.fromName}')),
       body: AbsorbPointer(
         absorbing: _busy,
-        child: ListView(padding: const EdgeInsets.all(16), children: [
-          MoneyRow('Worker declared', h.declaredPaise, bold: true),
-          MoneyRow('System cash in hand at declaration', h.expectedPaise),
-          const SizedBox(height: 4),
-          const Text('Count the cash yourself (grey = worker\'s declared count).', style: TextStyle(color: Colors.black54)),
-          const SizedBox(height: 8),
-          DenominationGrid(counts: _counted, reference: h.declaredDenoms, onChanged: (m) => setState(() => _counted = m)),
-          if (counted > 0 && variance != 0)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text('Variance ${rupees(variance)}', style: const TextStyle(color: dueRed, fontSize: 18, fontWeight: FontWeight.w800)),
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            MoneyRow('Worker declared', h.declaredPaise, bold: true),
+            MoneyRow('System cash in hand at declaration', h.expectedPaise),
+            const SizedBox(height: 4),
+            const Text(
+              'Count the cash yourself (grey = worker\'s declared count).',
+              style: TextStyle(color: Colors.black54),
             ),
-          TextField(
-            controller: _note,
-            decoration: InputDecoration(labelText: variance != 0 ? 'Note (required: count differs)' : 'Note (optional)'),
-          ),
-          const SizedBox(height: 16),
-          if (_photo != null) ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.file(_photo!, height: 200, fit: BoxFit.cover)),
-          OutlinedButton.icon(
-            onPressed: _takePhoto,
-            icon: const Icon(Icons.photo_camera),
-            label: Text(_photo == null ? 'Take photo of the counted cash (required)' : 'Retake photo'),
-          ),
-          const SizedBox(height: 16),
-          BigButton(
-            label: 'Confirm ${rupees(counted)}',
-            icon: Icons.verified,
-            color: paidGreen,
-            onPressed: counted > 0 && _photo != null ? _confirm : null,
-          ),
-          const SizedBox(height: 8),
-          TextButton(onPressed: _reject, child: const Text('Reject handover', style: TextStyle(color: dueRed))),
-        ]),
+            const SizedBox(height: 8),
+            DenominationGrid(
+              counts: _counted,
+              reference: h.declaredDenoms,
+              onChanged: (m) => setState(() => _counted = m),
+            ),
+            if (counted > 0 && variance != 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'Variance ${rupees(variance)}',
+                  style: const TextStyle(color: dueRed, fontSize: 18, fontWeight: FontWeight.w800),
+                ),
+              ),
+            TextField(
+              controller: _note,
+              decoration: InputDecoration(
+                labelText: variance != 0 ? 'Note (required: count differs)' : 'Note (optional)',
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (_photo != null)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.file(_photo!, height: 200, fit: BoxFit.cover),
+              ),
+            OutlinedButton.icon(
+              onPressed: _takePhoto,
+              icon: const Icon(Icons.photo_camera),
+              label: Text(_photo == null ? 'Take photo of the counted cash (required)' : 'Retake photo'),
+            ),
+            const SizedBox(height: 16),
+            BigButton(
+              label: 'Confirm ${rupees(counted)}',
+              icon: Icons.verified,
+              color: paidGreen,
+              onPressed: counted > 0 && _photo != null ? _confirm : null,
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: _reject,
+              child: const Text('Reject handover', style: TextStyle(color: dueRed)),
+            ),
+          ],
+        ),
       ),
     );
   }

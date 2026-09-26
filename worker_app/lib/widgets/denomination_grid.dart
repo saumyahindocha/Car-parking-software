@@ -42,8 +42,15 @@ class _DenominationGridState extends State<DenominationGrid> {
     super.dispose();
   }
 
+  /// Current counts read from the text fields (always up to date, even when
+  /// several taps land before the parent rebuilds).
+  Map<int, int> get _current => {
+    for (final d in denominations)
+      if ((int.tryParse(_ctl[d]!.text) ?? 0) > 0) d: int.parse(_ctl[d]!.text),
+  };
+
   void _set(int d, int n) {
-    final m = Map<int, int>.from(widget.counts);
+    final m = _current;
     if (n <= 0) {
       m.remove(d);
     } else {
@@ -53,7 +60,7 @@ class _DenominationGridState extends State<DenominationGrid> {
   }
 
   void _bump(int d, int delta) {
-    final n = ((widget.counts[d] ?? 0) + delta).clamp(0, 9999);
+    final n = ((int.tryParse(_ctl[d]!.text) ?? 0) + delta).clamp(0, 9999);
     _ctl[d]!.text = n == 0 ? '' : '$n';
     _set(d, n);
   }
@@ -61,44 +68,55 @@ class _DenominationGridState extends State<DenominationGrid> {
   @override
   Widget build(BuildContext context) {
     final total = denominationTotalPaise(widget.counts);
-    return Column(children: [
-      for (final d in denominations)
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 3),
-          child: Row(children: [
-            SizedBox(
-              width: 64,
-              child: Text('₹$d', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+    return Column(
+      children: [
+        for (final d in denominations)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 3),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 64,
+                  child: Text('₹$d', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                ),
+                if (widget.reference != null)
+                  SizedBox(
+                    width: 52,
+                    child: Text('×${widget.reference![d] ?? 0}', style: const TextStyle(color: Colors.black45)),
+                  ),
+                IconButton(onPressed: () => _bump(d, -1), icon: const Icon(Icons.remove_circle_outline)),
+                SizedBox(
+                  width: 64,
+                  child: TextField(
+                    controller: _ctl[d],
+                    textAlign: TextAlign.center,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(4)],
+                    decoration: const InputDecoration(hintText: '0', isDense: true, border: OutlineInputBorder()),
+                    onChanged: (v) => _set(d, int.tryParse(v) ?? 0),
+                  ),
+                ),
+                IconButton(onPressed: () => _bump(d, 1), icon: const Icon(Icons.add_circle_outline)),
+                Expanded(
+                  child: Text(
+                    rupees(d * 100 * (widget.counts[d] ?? 0)),
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(fontSize: 15),
+                  ),
+                ),
+              ],
             ),
-            if (widget.reference != null)
-              SizedBox(
-                width: 52,
-                child: Text('×${widget.reference![d] ?? 0}', style: const TextStyle(color: Colors.black45)),
-              ),
-            IconButton(onPressed: () => _bump(d, -1), icon: const Icon(Icons.remove_circle_outline)),
-            SizedBox(
-              width: 64,
-              child: TextField(
-                controller: _ctl[d],
-                textAlign: TextAlign.center,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(4)],
-                decoration: const InputDecoration(hintText: '0', isDense: true, border: OutlineInputBorder()),
-                onChanged: (v) => _set(d, int.tryParse(v) ?? 0),
-              ),
+          ),
+        const Divider(),
+        Row(
+          children: [
+            const Expanded(
+              child: Text('Total', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
             ),
-            IconButton(onPressed: () => _bump(d, 1), icon: const Icon(Icons.add_circle_outline)),
-            Expanded(
-              child: Text(rupees(d * 100 * (widget.counts[d] ?? 0)),
-                  textAlign: TextAlign.right, style: const TextStyle(fontSize: 15)),
-            ),
-          ]),
+            Text(rupees(total), style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+          ],
         ),
-      const Divider(),
-      Row(children: [
-        const Expanded(child: Text('Total', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800))),
-        Text(rupees(total), style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
-      ]),
-    ]);
+      ],
+    );
   }
 }

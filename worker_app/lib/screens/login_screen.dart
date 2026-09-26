@@ -63,75 +63,94 @@ class _LoginScreenState extends State<LoginScreen> {
             padding: const EdgeInsets.all(24),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 420),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                const Icon(Icons.local_parking, size: 72, color: upiBlue),
-                const SizedBox(height: 8),
-                const Text('Parking Worker', textAlign: TextAlign.center, style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 32),
-                TextField(
-                  controller: _user,
-                  textInputAction: TextInputAction.next,
-                  autocorrect: false,
-                  decoration: const InputDecoration(labelText: 'Username', prefixIcon: Icon(Icons.person), border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _pin,
-                  obscureText: true,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  onSubmitted: (_) => _login(),
-                  decoration: const InputDecoration(labelText: 'PIN', prefixIcon: Icon(Icons.pin), border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 16),
-                if (_error != null)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Text(_error!, style: const TextStyle(color: dueRed, fontSize: 15)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Icon(Icons.local_parking, size: 72, color: upiBlue),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Parking Worker',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
                   ),
-                BigButton(label: _busy ? 'Logging in…' : 'Log in', icon: Icons.login, onPressed: _busy ? null : _login),
-                const SizedBox(height: 24),
-                TextButton.icon(
-                  onPressed: () => setState(() => _showServer = !_showServer),
-                  icon: const Icon(Icons.dns, size: 18),
-                  label: Text('Server: ${app.serverUrl}'),
-                ),
-                if (_showServer) ...[
+                  const SizedBox(height: 32),
                   TextField(
-                    controller: _server,
-                    keyboardType: TextInputType.url,
+                    controller: _user,
+                    textInputAction: TextInputAction.next,
                     autocorrect: false,
-                    decoration: InputDecoration(
-                      labelText: 'Server URL',
-                      helperText: 'Default $defaultServerUrl',
-                      border: const OutlineInputBorder(),
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.restart_alt),
-                        tooltip: 'Reset to default',
-                        onPressed: () => _server.text = defaultServerUrl,
-                      ),
+                    decoration: const InputDecoration(
+                      labelText: 'Username',
+                      prefixIcon: Icon(Icons.person),
+                      border: OutlineInputBorder(),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  OutlinedButton(
-                    onPressed: () async {
-                      await app.setServerUrl(_server.text);
-                      final ok = await app.api.health();
-                      if (context.mounted) {
-                        showSnack(context, ok ? 'Server reachable' : 'Server not reachable', error: !ok);
-                      }
-                    },
-                    child: const Text('Save & test connection'),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _pin,
+                    obscureText: true,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    onSubmitted: (_) => _login(),
+                    decoration: const InputDecoration(
+                      labelText: 'PIN',
+                      prefixIcon: Icon(Icons.pin),
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  if (_error != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Text(_error!, style: const TextStyle(color: dueRed, fontSize: 15)),
+                    ),
+                  BigButton(
+                    label: _busy ? 'Logging in…' : 'Log in',
+                    icon: Icons.login,
+                    onPressed: _busy ? null : _login,
+                  ),
+                  const SizedBox(height: 24),
+                  TextButton.icon(
+                    onPressed: () => setState(() => _showServer = !_showServer),
+                    icon: const Icon(Icons.dns, size: 18),
+                    label: Text('Server: ${app.serverUrl}'),
+                  ),
+                  if (_showServer) ...[
+                    TextField(
+                      controller: _server,
+                      keyboardType: TextInputType.url,
+                      autocorrect: false,
+                      decoration: InputDecoration(
+                        labelText: 'Server URL',
+                        helperText: 'Default $defaultServerUrl',
+                        border: const OutlineInputBorder(),
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.restart_alt),
+                          tooltip: 'Reset to default',
+                          onPressed: () => _server.text = defaultServerUrl,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton(
+                      onPressed: () async {
+                        await app.setServerUrl(_server.text);
+                        final ok = await app.api.health();
+                        if (context.mounted) {
+                          showSnack(context, ok ? 'Server reachable' : 'Server not reachable', error: !ok);
+                        }
+                      },
+                      child: const Text('Save & test connection'),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  Text(
+                    'This phone: ${app.deviceId.substring(0, 8)}…\nWorker and guard accounts are bound to one phone at first login. '
+                    'Ask the admin to reset if you change phones.',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.black45, fontSize: 12),
                   ),
                 ],
-                const SizedBox(height: 16),
-                Text(
-                  'This phone: ${app.deviceId.substring(0, 8)}…\nWorker and guard accounts are bound to one phone at first login. '
-                  'Ask the admin to reset if you change phones.',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.black45, fontSize: 12),
-                ),
-              ]),
+              ),
             ),
           ),
         ),

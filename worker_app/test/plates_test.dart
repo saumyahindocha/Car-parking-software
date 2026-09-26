@@ -64,6 +64,9 @@ void main() {
     test('surrounding text on the same line', () {
       expect(plates.extractPlate(['HONDA', 'KA01AB1234 SERVICE']), 'KA01AB1234');
     });
+    test('words glued together by OCR', () {
+      expect(plates.extractPlate(['KA01AB1234SERVICE']), 'KA01AB1234');
+    });
     test('BH series', () {
       expect(plates.extractPlate(['22 BH 1234 AA']), '22BH1234AA');
     });

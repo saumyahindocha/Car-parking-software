@@ -303,6 +303,28 @@ def emitter_main(
         outbox.close()
 
 
+def refresh_config(cfg: ServiceConfig, client: BackendClient | None = None) -> ServiceConfig:
+    """Overlay ``GET /api/anpr/config`` onto ``cfg``; returns ``cfg`` unchanged if unreachable."""
+    own = client is None
+    client = client or BackendClient(cfg.backend)
+    try:
+        remote = client.fetch_config()
+    finally:
+        if own:
+            client.close()
+    if remote is None:
+        log.warning("backend config unavailable; using the local config (gate directions from YAML)")
+        return cfg
+    try:
+        new = apply_remote_config(cfg, remote)
+    except ValueError as exc:
+        log.warning("ignoring invalid remote config: %s", exc)
+        return cfg
+    log.info("backend config applied: %s",
+             ", ".join(f"{g.id}={g.direction.value}" for g in new.gates))
+    return new
+
+
 # ------------------------------------------------------------------------ supervisor
 class Supervisor:
     """Starts and watches all processes; refreshes config from the backend."""
@@ -367,6 +389,9 @@ class Supervisor:
         self._cams[camera_id] = p
 
     def run(self) -> int:
+        if self.cfg.backend.url:
+            # Start with the backend's view (effective gate direction, settings) when it answers.
+            self.cfg = refresh_config(self.cfg)
         plan = self._camera_plan()
         if not plan:
             log.error("no cameras to run (check rtsp_url / replay files)")
@@ -412,7 +437,7 @@ class Supervisor:
 
         refresh_s = self.cfg.backend.config_refresh_s
         last_refresh = time.monotonic()
-        backend = BackendClient(self.cfg.backend) if (self.cfg.backend.url and not self.replay_mode) else None
+        backend = BackendClient(self.cfg.backend) if self.cfg.backend.url else None
         try:
             while True:
                 time.sleep(0.5)
@@ -483,7 +508,9 @@ class Supervisor:
                     _g, old_cam = old.camera(cam.id)
                 except KeyError:
                     continue
-                if cam != old_cam:
+                if cam != old_cam and self.replay_mode:
+                    log.info("camera %s config changed (ignored during replay)", cam.id)
+                elif cam != old_cam:
                     log.info("camera %s config changed: restarting worker", cam.id)
                     p = self._cams[cam.id]
                     p.terminate()

@@ -79,7 +79,11 @@ class SynthCamera:
 @dataclass
 class SynthScenario:
     gate_id: str = "G1"
-    direction: str = "IN"
+    direction: str = "IN"  # gate direction written to the config / ground truth
+    # Image-space travel direction that counts as IN.  Vehicles in the scene ride
+    # away from the rear-facing cameras (upwards): at an entry gate that is IN
+    # ([0, -1]); at an exit gate the same view shows LEAVING bikes, so [0, 1].
+    in_vector: tuple[float, float] = (0.0, -1.0)
     width: int = 1280
     height: int = 720
     fps: float = 25.0
@@ -300,8 +304,14 @@ def default_vehicles(compact: bool = False, seed: int = 7, wrong_way: bool = Fal
 
 def default_scenario(gate_id: str = "G1", width: int = 1280, height: int = 720, fps: float = 25.0,
                      compact: bool = False, overview: bool = True, ext: str = ".mp4",
-                     seed: int = 7, wrong_way: bool = False) -> SynthScenario:
+                     seed: int = 7, wrong_way: bool = False, direction: str = "IN",
+                     time_offset_s: float = 0.0) -> SynthScenario:
+    """One gate's scene.  ``direction="OUT"`` renders the exit gate: the same
+    riders (same plates) leave, ``time_offset_s`` later, and ``in_vector`` is
+    flipped so that riding away from the cameras counts as OUT."""
     vehicles = default_vehicles(compact=compact, seed=seed, wrong_way=wrong_way)
+    for v in vehicles:
+        v.start_s += time_offset_s
     duration = max(v.cross_s for v in vehicles) + 2.0
     cams = [
         SynthCamera(f"{gate_id}-L", "ANPR", SPANS["L"], f"{gate_id}-L{ext}"),
@@ -309,8 +319,9 @@ def default_scenario(gate_id: str = "G1", width: int = 1280, height: int = 720, 
     ]
     if overview:
         cams.append(SynthCamera(f"{gate_id}-O", "OVERVIEW", SPANS["O"], f"{gate_id}-O{ext}"))
-    return SynthScenario(gate_id=gate_id, width=width, height=height, fps=fps, duration_s=round(duration, 2),
-                         vehicles=vehicles, cameras=cams, seed=seed)
+    in_vector = (0.0, 1.0) if direction == "OUT" else (0.0, -1.0)
+    return SynthScenario(gate_id=gate_id, direction=direction, in_vector=in_vector, width=width, height=height,
+                         fps=fps, duration_s=round(duration, 2), vehicles=vehicles, cameras=cams, seed=seed)
 
 
 def _fourcc_for(path: Path) -> int:
@@ -364,6 +375,12 @@ def render_scenario(sc: SynthScenario, out_dir: str | Path) -> dict[str, Any]:
     return gt
 
 
+def _travel_direction(v: SynthVehicle, in_vector: tuple[float, float]) -> str:
+    """IN/OUT as the service will classify it: riding away moves up the image."""
+    motion_y = -1.0 if v.direction > 0 else 1.0
+    return "IN" if motion_y * in_vector[1] > 0 else "OUT"
+
+
 def build_ground_truth(sc: SynthScenario) -> dict[str, Any]:
     vehicles = []
     for v in sc.vehicles:
@@ -374,7 +391,7 @@ def build_ground_truth(sc: SynthScenario) -> dict[str, Any]:
             "layout": v.layout,
             "lateral": round(v.lateral, 4),
             "cross_ms": int(round(v.cross_s * 1000)),
-            "direction": "IN" if v.direction > 0 else "OUT",
+            "direction": _travel_direction(v, sc.in_vector),
             "visible_in": visible,
             "side_by_side": v.side_by_side,
             "occluded": v.occluded,
@@ -389,7 +406,7 @@ def build_ground_truth(sc: SynthScenario) -> dict[str, Any]:
         "duration_s": sc.duration_s,
         "capture_line": [[0.0, round(CAPTURE_LINE_Y, 4)], [1.0, round(CAPTURE_LINE_Y, 4)]],
         "roi": [[0.0, 0.12], [1.0, 0.12], [1.0, 1.0], [0.0, 1.0]],
-        "in_vector": [0.0, -1.0],
+        "in_vector": [float(sc.in_vector[0]), float(sc.in_vector[1])],
         "cameras": [
             {"id": c.id, "role": c.role, "file": c.file, "gate_span": [max(0.0, c.span[0]), min(1.0, c.span[1])]}
             for c in sc.cameras
@@ -418,19 +435,28 @@ def camera_entries(gt: dict[str, Any], base_dir: Path) -> list[dict[str, Any]]:
 
 def generate(out_dir: str | Path, gates: list[str] | None = None, width: int = 1280, height: int = 720,
              fps: float = 25.0, compact: bool = False, overview: bool = True, ext: str = ".mp4",
-             seed: int = 7, wrong_way: bool = False) -> Path:
-    """Render one scenario per gate and write ``site.synth.yaml``.  Returns the config path."""
+             seed: int = 7, wrong_way: bool = False, exit_delay_s: float = 8.0) -> Path:
+    """Render a coherent site demo and write ``site.synth.yaml``.  Returns the config path.
+
+    The first gate is the entry gate (IN); every further gate is an exit gate
+    (OUT) where the SAME plates leave ``exit_delay_s`` after entering, so the
+    backend opens and closes a session for each vehicle.  The ``--wrong-way``
+    rider only appears at the entry gate.
+    """
     out = Path(out_dir).resolve()
     out.mkdir(parents=True, exist_ok=True)
     gate_entries = []
     for gi, gate_id in enumerate(gates or ["G1", "G2"]):
+        entry = gi == 0
         sc = default_scenario(gate_id, width, height, fps, compact=compact, overview=overview, ext=ext,
-                              seed=seed + gi, wrong_way=wrong_way)
+                              seed=seed + gi, wrong_way=wrong_way and entry,
+                              direction="IN" if entry else "OUT",
+                              time_offset_s=0.0 if entry else exit_delay_s)
         gdir = out / gate_id
         gt = render_scenario(sc, gdir)
         gate_entries.append({
             "id": gate_id,
-            "name": f"Gate {gate_id[1:] if gate_id[1:].isdigit() else gate_id}",
+            "name": f"Gate {gate_id[1:] if gate_id[1:].isdigit() else gate_id} ({'entry' if entry else 'exit'})",
             "direction": gt["direction"],
             "cameras": camera_entries(gt, gdir),
         })

@@ -73,7 +73,8 @@ class _ShiftScreenState extends State<ShiftScreen> {
         builder: (c) => SimpleDialog(
           title: const Text('Which zone are you covering?'),
           children: [
-            for (final z in boot!.zones) SimpleDialogOption(onPressed: () => Navigator.pop(c, z.id), child: Text(z.name)),
+            for (final z in boot!.zones)
+              SimpleDialogOption(onPressed: () => Navigator.pop(c, z.id), child: Text(z.name)),
             SimpleDialogOption(onPressed: () => Navigator.pop(c, -1), child: const Text('No zone')),
           ],
         ),
@@ -102,11 +103,20 @@ class _ShiftScreenState extends State<ShiftScreen> {
     final held = _app.cashPosition.heldPaise;
     String? note;
     if (held > 0) {
-      note = await textPrompt(context, '${rupees(held)} still in hand',
-          label: 'Hand it over first, or explain why (logged as a variance)', maxLines: 3);
+      note = await textPrompt(
+        context,
+        '${rupees(held)} still in hand',
+        label: 'Hand it over first, or explain why (logged as a variance)',
+        maxLines: 3,
+      );
       if (note == null) return;
     } else {
-      final ok = await confirmDialog(context, 'Close shift?', 'Totals are locked and sent to the supervisor.', ok: 'Close shift');
+      final ok = await confirmDialog(
+        context,
+        'Close shift?',
+        'Totals are locked and sent to the supervisor.',
+        ok: 'Close shift',
+      );
       if (!ok) return;
     }
     setState(() => _busy = true);
@@ -129,67 +139,103 @@ class _ShiftScreenState extends State<ShiftScreen> {
     final s = _shift;
     final content = RefreshIndicator(
       onRefresh: _load,
-      child: ListView(padding: const EdgeInsets.all(16), children: [
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.map, size: 36),
-            title: Text(zone == null ? 'No zone assigned right now' : 'Your zone: ${zone.name}',
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-            subtitle: Text(zone?.until == null ? 'Ask your supervisor for your zone.' : 'Until ${dateTimeIst(zone!.until)}'),
-          ),
-        ),
-        if (_error != null) Padding(padding: const EdgeInsets.all(8), child: Text(_error!, style: const TextStyle(color: Colors.deepOrange))),
-        if (_loading && s == null) const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator())),
-        if (_closed != null)
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
           Card(
-            color: Colors.green.shade50,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('Shift closed', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-                MoneyRow('UPI', (_closed!['upi_total_paise'] as num?)?.toInt() ?? 0),
-                MoneyRow('Cash', (_closed!['cash_total_paise'] as num?)?.toInt() ?? 0),
-                MoneyRow('Handed over', (_closed!['handed_over_paise'] as num?)?.toInt() ?? 0),
-                MoneyRow('Variance', (_closed!['variance_paise'] as num?)?.toInt() ?? 0, color: dueRed),
-              ]),
+            child: ListTile(
+              leading: const Icon(Icons.map, size: 36),
+              title: Text(
+                zone == null ? 'No zone assigned right now' : 'Your zone: ${zone.name}',
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              ),
+              subtitle: Text(
+                zone?.until == null ? 'Ask your supervisor for your zone.' : 'Until ${dateTimeIst(zone!.until)}',
+              ),
             ),
           ),
-        if (!_loading && s == null && _closed == null)
-          Column(children: [
-            const EmptyState('No shift open.', icon: Icons.schedule),
-            BigButton(label: 'Open shift', icon: Icons.play_arrow, onPressed: _busy || _fromCache ? null : _open),
-          ]),
-        if (s != null) ...[
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Shift open since ${dateTimeIst(s.openedAt)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-                if (s.zoneId != null) Text('Zone: ${app.bootstrap?.zoneName(s.zoneId) ?? s.zoneId}'),
-                const Divider(height: 24),
-                MoneyRow('UPI (${s.upiCount})', s.upiPaise, color: upiBlue, bold: true, size: 20),
-                MoneyRow('Cash (${s.cashCount})', s.cashPaise, color: paidGreen, bold: true, size: 20),
-                const Divider(),
-                MoneyRow('Handed over', s.handedOverPaise),
-                if (s.pendingHandoverPaise > 0) MoneyRow('Handover awaiting count', s.pendingHandoverPaise, color: Colors.orange),
-                MoneyRow('Cash in hand (incl. unsynced)', app.cashPosition.heldPaise, bold: true),
-                if (_fromCache) const Text('(last known — offline)', style: TextStyle(color: Colors.deepOrange, fontSize: 12)),
-              ]),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.all(8),
+              child: Text(_error!, style: const TextStyle(color: Colors.deepOrange)),
             ),
-          ),
-          const SizedBox(height: 12),
-          BigButton(
-            label: 'Close shift',
-            icon: Icons.stop,
-            color: dueRed,
-            outlined: true,
-            onPressed: _busy || _fromCache ? null : _close,
-          ),
+          if (_loading && s == null)
+            const Padding(
+              padding: EdgeInsets.all(24),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          if (_closed != null)
+            Card(
+              color: Colors.green.shade50,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Shift closed', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                    MoneyRow('UPI', (_closed!['upi_total_paise'] as num?)?.toInt() ?? 0),
+                    MoneyRow('Cash', (_closed!['cash_total_paise'] as num?)?.toInt() ?? 0),
+                    MoneyRow('Handed over', (_closed!['handed_over_paise'] as num?)?.toInt() ?? 0),
+                    MoneyRow('Variance', (_closed!['variance_paise'] as num?)?.toInt() ?? 0, color: dueRed),
+                  ],
+                ),
+              ),
+            ),
+          if (!_loading && s == null && _closed == null)
+            Column(
+              children: [
+                const EmptyState('No shift open.', icon: Icons.schedule),
+                BigButton(label: 'Open shift', icon: Icons.play_arrow, onPressed: _busy || _fromCache ? null : _open),
+              ],
+            ),
+          if (s != null) ...[
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Shift open since ${dateTimeIst(s.openedAt)}',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                    ),
+                    if (s.zoneId != null) Text('Zone: ${app.bootstrap?.zoneName(s.zoneId) ?? s.zoneId}'),
+                    const Divider(height: 24),
+                    MoneyRow('UPI (${s.upiCount})', s.upiPaise, color: upiBlue, bold: true, size: 20),
+                    MoneyRow('Cash (${s.cashCount})', s.cashPaise, color: paidGreen, bold: true, size: 20),
+                    const Divider(),
+                    MoneyRow('Handed over', s.handedOverPaise),
+                    if (s.pendingHandoverPaise > 0)
+                      MoneyRow('Handover awaiting count', s.pendingHandoverPaise, color: Colors.orange),
+                    MoneyRow('Cash in hand (incl. unsynced)', app.cashPosition.heldPaise, bold: true),
+                    if (_fromCache)
+                      const Text('(last known — offline)', style: TextStyle(color: Colors.deepOrange, fontSize: 12)),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            BigButton(
+              label: 'Close shift',
+              icon: Icons.stop,
+              color: dueRed,
+              outlined: true,
+              onPressed: _busy || _fromCache ? null : _close,
+            ),
+          ],
         ],
-      ]),
+      ),
     );
     if (widget.standalone) {
-      return Scaffold(appBar: AppBar(title: const Text('My shift')), body: Column(children: [const ConnectivityBar(), Expanded(child: content)]));
+      return Scaffold(
+        appBar: AppBar(title: const Text('My shift')),
+        body: Column(
+          children: [
+            const ConnectivityBar(),
+            Expanded(child: content),
+          ],
+        ),
+      );
     }
     return content;
   }

@@ -25,10 +25,10 @@ String base36(int n) {
 enum TxnKind { session, pass, vehicle }
 
 String _kindCode(TxnKind k) => switch (k) {
-      TxnKind.session => 'S',
-      TxnKind.pass => 'P',
-      TxnKind.vehicle => 'V',
-    };
+  TxnKind.session => 'S',
+  TxnKind.pass => 'P',
+  TxnKind.vehicle => 'V',
+};
 
 /// `P{kind}{base36(id)}X{6 upper hex}`, e.g. `PS2N9XA1B2C3`.
 String makeTxnRef(TxnKind kind, int id, {Random? random}) {

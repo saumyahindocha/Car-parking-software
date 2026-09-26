@@ -63,7 +63,8 @@ def test_remote_config_overlay(monkeypatch: pytest.MonkeyPatch) -> None:
     g1 = new.gate("G1")
     assert g1.direction == GateDirection.BOTH and g1.name == "North gate"
     _g, cam = new.camera("G1-L")
-    assert cam.rtsp_url == "rtsp://new/1" and cam.in_vector == [0, 1]
+    assert cam.rtsp_url == "rtsp://new/1"
+    assert cam.in_vector == [0, -1]  # YAML geometry kept by default (backend.geometry: prefer_local)
     assert cam.gate_span == [0.0, 0.65]  # local-only field kept
     assert new.camera("G1-X")[1].role == CameraRole.OVERVIEW
     assert new.gate("G3").direction == GateDirection.IN
@@ -80,3 +81,48 @@ def test_redact_url() -> None:
     assert redact_url("rtsp://anpr:s3cret@10.0.0.1:554/ch1") == "rtsp://anpr:***@10.0.0.1:554/ch1"
     assert redact_url("rtsp://10.0.0.1/ch1") == "rtsp://10.0.0.1/ch1"
     assert redact_url(None) == ""
+
+
+SEEDED_BACKEND = {  # shape of backend/app/seed.py + GET /api/anpr/config
+    "gates": [
+        {"id": "G1", "name": "Gate 1 (Station side)", "direction": "IN", "cameras": [
+            {"id": "G1-L", "role": "ANPR", "side": "LEFT", "rtsp_url": "rtsp://192.168.10.11:554/x",
+             "roi": [[0, 300], [1280, 300], [1280, 720], [0, 720]], "capture_line": [[0, 520], [1280, 520]],
+             "in_vector": [0, 1]},
+            {"id": "G1-N", "role": "ANPR", "side": "RIGHT", "rtsp_url": "rtsp://n",
+             "roi": [[0, 0], [10, 0], [10, 10]], "capture_line": [[0, 5], [10, 5]], "in_vector": [0, 1]},
+        ]},
+        {"id": "G2", "name": "Gate 2 (Road side)", "direction": "IN", "cameras": []},  # schedule flipped G2
+    ],
+    "settings": {"merge_window_s": 10, "dedupe_window_s": 60, "min_confidence": 0.6, "state_codes": ["MH", "GJ"]},
+}
+
+
+def test_backend_direction_wins_and_local_geometry_is_kept(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("BACKEND_URL", raising=False)
+    cfg = load_config(EXAMPLE)
+    new = apply_remote_config(cfg, SEEDED_BACKEND)
+    assert new.gate("G2").direction == GateDirection.IN  # backend (schedule) beats YAML's OUT
+    _g, cam = new.camera("G1-L")
+    assert cam.capture_line == [[0.0, 0.62], [1.0, 0.62]]  # YAML geometry kept (prefer_local)
+    assert cam.in_vector == [0, -1]
+    assert cam.rtsp_url == "rtsp://192.168.10.11:554/x"
+    _g, extra = new.camera("G1-N")  # camera without local geometry takes the backend's
+    assert extra.capture_line == [[0, 5], [10, 5]]
+    assert new.plates.state_codes == ["MH", "GJ"]
+    cfg.backend.geometry = "prefer_backend"
+    _g, cam = apply_remote_config(cfg, SEEDED_BACKEND).camera("G1-L")
+    assert cam.capture_line == [[0, 520], [1280, 520]] and cam.in_vector == [0, 1]
+
+
+def test_refresh_config_uses_backend_and_survives_outage() -> None:
+    import httpx
+
+    from anpr_service.backend import BackendClient
+    from anpr_service.service import refresh_config
+
+    cfg = load_config(EXAMPLE)
+    ok = BackendClient(cfg.backend, transport=httpx.MockTransport(lambda r: httpx.Response(200, json=SEEDED_BACKEND)))
+    assert refresh_config(cfg, ok).gate("G2").direction == GateDirection.IN
+    down = BackendClient(cfg.backend, transport=httpx.MockTransport(lambda r: httpx.Response(503)))
+    assert refresh_config(cfg, down).gate("G2").direction == GateDirection.OUT

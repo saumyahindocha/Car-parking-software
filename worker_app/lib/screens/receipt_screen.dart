@@ -159,61 +159,91 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
   Widget _phoneView() {
     final rec = _payment?.receipt;
     final ch = rec?.channel == 'WHATSAPP' ? 'WhatsApp' : 'SMS';
-    return ListView(padding: const EdgeInsets.all(24), children: [
-      const Icon(Icons.mark_email_read, size: 88, color: paidGreen),
-      const SizedBox(height: 12),
-      Text(
-        _offline
-            ? 'Receipt will be sent by SMS/WhatsApp${_phone != null ? ' to ${_mask(_phone!)}' : ' to the number on file'} when this phone syncs.'
-            : 'Receipt sent by $ch${_phone != null ? ' to ${_mask(_phone!)}' : ''}.',
-        textAlign: TextAlign.center,
-        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-      ),
-      if (rec?.number != null)
-        Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Text('Receipt ${rec!.number}', textAlign: TextAlign.center, style: const TextStyle(color: Colors.black54)),
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        const Icon(Icons.mark_email_read, size: 88, color: paidGreen),
+        const SizedBox(height: 12),
+        Text(
+          _offline
+              ? 'Receipt will be sent by SMS/WhatsApp${_phone != null ? ' to ${_mask(_phone!)}' : ' to the number on file'} when this phone syncs.'
+              : 'Receipt sent by $ch${_phone != null ? ' to ${_mask(_phone!)}' : ''}.',
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
         ),
-      if (_offline)
-        const Padding(
-          padding: EdgeInsets.only(top: 8),
-          child: Text('Saved on this phone (offline).', textAlign: TextAlign.center, style: TextStyle(color: Colors.deepOrange)),
+        if (rec?.number != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              'Receipt ${rec!.number}',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.black54),
+            ),
+          ),
+        if (_offline)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: Text(
+              'Saved on this phone (offline).',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.deepOrange),
+            ),
+          ),
+        const SizedBox(height: 32),
+        BigButton(
+          label: 'Done — next vehicle',
+          icon: Icons.check,
+          color: paidGreen,
+          onPressed: () => Navigator.pop(context, true),
         ),
-      const SizedBox(height: 32),
-      BigButton(label: 'Done — next vehicle', icon: Icons.check, color: paidGreen, onPressed: () => Navigator.pop(context, true)),
-    ]);
+      ],
+    );
   }
 
   Widget _qrView() {
     final size = MediaQuery.of(context).size.width - 32;
-    return ListView(padding: const EdgeInsets.all(16), children: [
-      const Text('Customer: scan this QR to keep your receipt',
-          textAlign: TextAlign.center, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-      const SizedBox(height: 12),
-      Center(
-        child: Container(
-          color: Colors.white,
-          padding: const EdgeInsets.all(10),
-          child: QrImageView(data: _qrData, size: size.clamp(220, 420).toDouble(), backgroundColor: Colors.white),
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const Text(
+          'Customer: scan this QR to keep your receipt',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
         ),
-      ),
-      const SizedBox(height: 8),
-      Center(child: PlateText(a.request.target.displayPlate, size: 18)),
-      if (_offline)
-        const Padding(
-          padding: EdgeInsets.only(top: 6),
-          child: Text('Offline receipt: the full receipt link is issued when this phone syncs.',
-              textAlign: TextAlign.center, style: TextStyle(color: Colors.deepOrange, fontSize: 12)),
+        const SizedBox(height: 12),
+        Center(
+          child: Container(
+            color: Colors.white,
+            padding: const EdgeInsets.all(10),
+            child: QrImageView(data: _qrData, size: size.clamp(220, 420).toDouble(), backgroundColor: Colors.white),
+          ),
         ),
-      const SizedBox(height: 16),
-      BigButton(label: 'Customer scanned', icon: Icons.qr_code_scanner, color: paidGreen, onPressed: _busy ? null : _customerScanned),
-      const SizedBox(height: 8),
-      OutlinedButton.icon(
-        onPressed: _busy ? null : _gaveNumber,
-        icon: const Icon(Icons.sms),
-        label: const Text('Customer gave a mobile number instead'),
-      ),
-    ]);
+        const SizedBox(height: 8),
+        Center(child: PlateText(a.request.target.displayPlate, size: 18)),
+        if (_offline)
+          const Padding(
+            padding: EdgeInsets.only(top: 6),
+            child: Text(
+              'Offline receipt: the full receipt link is issued when this phone syncs.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.deepOrange, fontSize: 12),
+            ),
+          ),
+        const SizedBox(height: 16),
+        BigButton(
+          label: 'Customer scanned',
+          icon: Icons.qr_code_scanner,
+          color: paidGreen,
+          onPressed: _busy ? null : _customerScanned,
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: _busy ? null : _gaveNumber,
+          icon: const Icon(Icons.sms),
+          label: const Text('Customer gave a mobile number instead'),
+        ),
+      ],
+    );
   }
 
   static String _mask(String p) => p.length < 4 ? p : '••••••${p.substring(p.length - 4)}';

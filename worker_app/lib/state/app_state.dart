@@ -64,7 +64,10 @@ class AppState extends ChangeNotifier {
       await prefs.setString(_Keys.deviceId, deviceId);
     }
     final store = await LocalStore.open();
-    final api = ApiClient(baseUrl: prefs.getString(_Keys.server) ?? defaultServerUrl, token: prefs.getString(_Keys.token));
+    final api = ApiClient(
+      baseUrl: prefs.getString(_Keys.server) ?? defaultServerUrl,
+      token: prefs.getString(_Keys.token),
+    );
     final s = AppState._(prefs, store, api, deviceId);
     await s._restore();
     return s;
@@ -230,25 +233,32 @@ class AppState extends ChangeNotifier {
 
   /// Live cash-in-hand vs limit, enforced on the device even offline.
   CashPosition get cashPosition => CashPosition(
-        serverHeldPaise: serverCash?.cashInHandPaise ?? 0,
-        unsyncedPaise: unsyncedCashPaise,
-        limitPaise: bootstrap?.settings.cashLimitPaise ?? serverCash?.limitPaise ?? 200000,
-        warnRatio: bootstrap?.settings.cashWarnRatio ?? 0.8,
-      );
+    serverHeldPaise: serverCash?.cashInHandPaise ?? 0,
+    unsyncedPaise: unsyncedCashPaise,
+    limitPaise: bootstrap?.settings.cashLimitPaise ?? serverCash?.limitPaise ?? 200000,
+    warnRatio: bootstrap?.settings.cashWarnRatio ?? 0.8,
+  );
 
   bool get cashAllowed => (bootstrap?.cashAllowed ?? true) && (bootstrap?.settings.cashEnabled ?? true);
 
   /// Queue an offline action and try to send it right away.
-  Future<QueueItem> enqueue(String type, Map<String, dynamic> data,
-      {String? clientUuid, int amountPaise = 0, String? label, DateTime? createdAt}) async {
+  Future<QueueItem> enqueue(
+    String type,
+    Map<String, dynamic> data, {
+    String? clientUuid,
+    int amountPaise = 0,
+    String? label,
+    DateTime? createdAt,
+  }) async {
     final item = await store.enqueue(
-        type: type,
-        data: data,
-        userId: user!.id,
-        clientUuid: clientUuid,
-        amountPaise: amountPaise,
-        label: label,
-        createdAt: createdAt);
+      type: type,
+      data: data,
+      userId: user!.id,
+      clientUuid: clientUuid,
+      amountPaise: amountPaise,
+      label: label,
+      createdAt: createdAt,
+    );
     await refreshUnsynced();
     await sync?.refreshCounts();
     unawaited(sync?.flush());

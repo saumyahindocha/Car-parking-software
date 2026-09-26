@@ -62,15 +62,23 @@ class _HomeScreenState extends State<HomeScreen> {
     final zone = app.bootstrap?.zone;
     return Scaffold(
       appBar: AppBar(
-        title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(tabs[_index].label),
-          Text('${u.name} · ${u.role}${zone != null ? ' · ${zone.name}' : ''}',
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
-        ]),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(tabs[_index].label),
+            Text(
+              '${u.name} · ${u.role}${zone != null ? ' · ${zone.name}' : ''}',
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400),
+            ),
+          ],
+        ),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 4),
-            child: Icon(app.online ? Icons.cloud_done : Icons.cloud_off, color: app.online ? Colors.greenAccent.shade700 : Colors.red),
+            child: Icon(
+              app.online ? Icons.cloud_done : Icons.cloud_off,
+              color: app.online ? Colors.greenAccent.shade700 : Colors.red,
+            ),
           ),
           PopupMenuButton<String>(
             onSelected: (v) async {
@@ -80,16 +88,19 @@ class _HomeScreenState extends State<HomeScreen> {
                 case 'refresh':
                   await app.refreshBootstrap();
                   await app.refreshCash();
-                  if (context.mounted) showSnack(context, app.online ? 'Settings refreshed' : 'Offline: using cached settings');
+                  if (context.mounted) {
+                    showSnack(context, app.online ? 'Settings refreshed' : 'Offline: using cached settings');
+                  }
                 case 'logout':
                   final pending = app.sync?.pendingCount ?? 0;
                   final ok = await confirmDialog(
-                      context,
-                      'Log out?',
-                      pending > 0
-                          ? '$pending action(s) are not synced yet. They stay on this phone and sync when you log in again.'
-                          : 'You will need your PIN to log in again.',
-                      ok: 'Log out');
+                    context,
+                    'Log out?',
+                    pending > 0
+                        ? '$pending action(s) are not synced yet. They stay on this phone and sync when you log in again.'
+                        : 'You will need your PIN to log in again.',
+                    ok: 'Log out',
+                  );
                   if (ok) await app.logout();
               }
             },
@@ -101,11 +112,13 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      body: Column(children: [
-        const ConnectivityBar(),
-        if (u.isCollector) const CashLimitBanner(),
-        Expanded(child: tabs[_index].builder()),
-      ]),
+      body: Column(
+        children: [
+          const ConnectivityBar(),
+          if (u.isCollector) const CashLimitBanner(),
+          Expanded(child: tabs[_index].builder()),
+        ],
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
@@ -113,7 +126,10 @@ class _HomeScreenState extends State<HomeScreen> {
           for (final t in tabs)
             NavigationDestination(
               icon: t.label == 'Sync' && ((app.sync?.pendingCount ?? 0) + (app.sync?.failedCount ?? 0)) > 0
-                  ? Badge(label: Text('${(app.sync?.pendingCount ?? 0) + (app.sync?.failedCount ?? 0)}'), child: Icon(t.icon))
+                  ? Badge(
+                      label: Text('${(app.sync?.pendingCount ?? 0) + (app.sync?.failedCount ?? 0)}'),
+                      child: Icon(t.icon),
+                    )
                   : Icon(t.icon),
               label: t.label,
             ),

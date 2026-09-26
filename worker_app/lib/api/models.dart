@@ -21,7 +21,15 @@ class Role {
 }
 
 class UserInfo {
-  UserInfo({required this.id, required this.username, required this.name, required this.role, this.phone, this.deviceBound = false, this.active = true});
+  UserInfo({
+    required this.id,
+    required this.username,
+    required this.name,
+    required this.role,
+    this.phone,
+    this.deviceBound = false,
+    this.active = true,
+  });
   final int id;
   final String username;
   final String name;
@@ -35,24 +43,24 @@ class UserInfo {
   bool get isCollector => role == Role.worker || isSupervisor;
 
   factory UserInfo.fromJson(Map<String, dynamic> j) => UserInfo(
-        id: _i(j['id']),
-        username: _s(j['username']) ?? '',
-        name: _s(j['name']) ?? _s(j['username']) ?? '',
-        role: _s(j['role']) ?? Role.worker,
-        phone: _s(j['phone']),
-        deviceBound: _b(j['device_bound']),
-        active: j['active'] != false,
-      );
+    id: _i(j['id']),
+    username: _s(j['username']) ?? '',
+    name: _s(j['name']) ?? _s(j['username']) ?? '',
+    role: _s(j['role']) ?? Role.worker,
+    phone: _s(j['phone']),
+    deviceBound: _b(j['device_bound']),
+    active: j['active'] != false,
+  );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'username': username,
-        'name': name,
-        'role': role,
-        'phone': phone,
-        'device_bound': deviceBound,
-        'active': active,
-      };
+    'id': id,
+    'username': username,
+    'name': name,
+    'role': role,
+    'phone': phone,
+    'device_bound': deviceBound,
+    'active': active,
+  };
 }
 
 class ZoneInfo {
@@ -66,7 +74,15 @@ class ZoneInfo {
 }
 
 class PassTypeInfo {
-  PassTypeInfo({required this.id, required this.vehicleClass, required this.name, required this.periodUnit, required this.periodValue, required this.pricePaise, this.isDefault = false});
+  PassTypeInfo({
+    required this.id,
+    required this.vehicleClass,
+    required this.name,
+    required this.periodUnit,
+    required this.periodValue,
+    required this.pricePaise,
+    this.isDefault = false,
+  });
   final int id;
   final String vehicleClass;
   final String name;
@@ -75,14 +91,14 @@ class PassTypeInfo {
   final int pricePaise;
   final bool isDefault;
   factory PassTypeInfo.fromJson(Map<String, dynamic> j) => PassTypeInfo(
-        id: _i(j['id']),
-        vehicleClass: _s(j['vehicle_class']) ?? 'BIKE',
-        name: _s(j['name']) ?? 'Pass',
-        periodUnit: _s(j['period_unit']) ?? 'MONTH',
-        periodValue: _i(j['period_value'], 1),
-        pricePaise: _i(j['price_paise']),
-        isDefault: _b(j['is_default']),
-      );
+    id: _i(j['id']),
+    vehicleClass: _s(j['vehicle_class']) ?? 'BIKE',
+    name: _s(j['name']) ?? 'Pass',
+    periodUnit: _s(j['period_unit']) ?? 'MONTH',
+    periodValue: _i(j['period_value'], 1),
+    pricePaise: _i(j['price_paise']),
+    isDefault: _b(j['is_default']),
+  );
 }
 
 class SiteSettings {
@@ -106,21 +122,22 @@ class SiteSettings {
 
   int get toCollectHours => _i(raw['to_collect_hours'], 6);
   String get receiptFooter =>
-      _s(raw['receipt_footer']) ?? 'Final charge is calculated on actual time; any difference is adjusted on your next visit.';
+      _s(raw['receipt_footer']) ??
+      'Final charge is calculated on actual time; any difference is adjusted on your next visit.';
   int get passCandidateVisits => _i(raw['pass_candidate_visits'], 8);
 }
 
 class Bootstrap {
   Bootstrap(this.raw)
-      : user = UserInfo.fromJson(_m(raw['user'])),
-        zone = raw['zone'] is Map ? ZoneInfo.fromJson(_m(raw['zone'])) : null,
-        zones = _l(raw['zones']).map((e) => ZoneInfo.fromJson(_m(e))).toList(),
-        settings = SiteSettings(_m(raw['settings'])),
-        cashAllowed = raw['cash_allowed'] != false,
-        tariffs = _l(raw['tariffs']).map((e) => Tariff.fromJson(_m(e))).toList(),
-        passTypes = _l(raw['pass_types']).map((e) => PassTypeInfo.fromJson(_m(e))).toList(),
-        gates = {for (final g in _l(raw['gates'])) _s(_m(g)['id']) ?? '': _s(_m(g)['name']) ?? ''},
-        serverTime = parseTime(raw['server_time']);
+    : user = UserInfo.fromJson(_m(raw['user'])),
+      zone = raw['zone'] is Map ? ZoneInfo.fromJson(_m(raw['zone'])) : null,
+      zones = _l(raw['zones']).map((e) => ZoneInfo.fromJson(_m(e))).toList(),
+      settings = SiteSettings(_m(raw['settings'])),
+      cashAllowed = raw['cash_allowed'] != false,
+      tariffs = _l(raw['tariffs']).map((e) => Tariff.fromJson(_m(e))).toList(),
+      passTypes = _l(raw['pass_types']).map((e) => PassTypeInfo.fromJson(_m(e))).toList(),
+      gates = {for (final g in _l(raw['gates'])) _s(_m(g)['id']) ?? '': _s(_m(g)['name']) ?? ''},
+      serverTime = parseTime(raw['server_time']);
 
   final Map<String, dynamic> raw;
   final UserInfo user;
@@ -141,8 +158,9 @@ class Bootstrap {
     return 'Zone $id';
   }
 
-  List<PassTypeInfo> passTypesFor(String vehicleClass) => passTypes.where((p) => p.vehicleClass == vehicleClass).toList()
-    ..sort((a, b) => (b.isDefault ? 1 : 0) - (a.isDefault ? 1 : 0));
+  List<PassTypeInfo> passTypesFor(String vehicleClass) =>
+      passTypes.where((p) => p.vehicleClass == vehicleClass).toList()
+        ..sort((a, b) => (b.isDefault ? 1 : 0) - (a.isDefault ? 1 : 0));
 }
 
 /// A row of `GET /api/collect/list`.
@@ -286,7 +304,14 @@ class PaymentInfo {
 }
 
 class QuoteInfo {
-  QuoteInfo({required this.basePaise, required this.duesPaise, required this.creditPaise, required this.amountPaise, this.durationMinutes, this.local = false});
+  QuoteInfo({
+    required this.basePaise,
+    required this.duesPaise,
+    required this.creditPaise,
+    required this.amountPaise,
+    this.durationMinutes,
+    this.local = false,
+  });
   final int basePaise;
   final int duesPaise;
   final int creditPaise;
@@ -297,12 +322,12 @@ class QuoteInfo {
   final bool local;
 
   factory QuoteInfo.fromJson(Map<String, dynamic> j) => QuoteInfo(
-        basePaise: _i(j['base_paise']),
-        duesPaise: _i(j['dues_paise']),
-        creditPaise: _i(j['credit_paise']),
-        amountPaise: _i(j['amount_paise']),
-        durationMinutes: _in(j['duration_minutes']),
-      );
+    basePaise: _i(j['base_paise']),
+    duesPaise: _i(j['dues_paise']),
+    creditPaise: _i(j['credit_paise']),
+    amountPaise: _i(j['amount_paise']),
+    durationMinutes: _in(j['duration_minutes']),
+  );
 }
 
 class CashHolding {

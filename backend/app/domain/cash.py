@@ -186,7 +186,9 @@ def handover_dict(db: Session, h: CashHandover) -> dict:
     return {"id": h.id, "from_user": h.from_user, "from_name": fu.name if fu else None, "to_user": h.to_user,
             "shift_id": h.shift_id, "expected_paise": h.expected_paise, "declared_paise": h.declared_paise,
             "declared_denoms": h.declared_denoms, "counted_paise": h.counted_paise, "counted_denoms": h.counted_denoms,
-            "variance_paise": h.variance_paise, "status": h.status, "photo_path": h.photo_path, "note": h.note,
+            "variance_paise": h.variance_paise, "status": h.status, "photo_path": h.photo_path,
+            "photo_url": f"/api/uploads/{h.photo_path}" if h.photo_path else None, "note": h.note,
+            "to_name": (db.get(User, h.to_user).name if h.to_user else None),
             "declared_at": h.declared_at.isoformat(), "confirmed_at": h.confirmed_at.isoformat() if h.confirmed_at else None}
 
 

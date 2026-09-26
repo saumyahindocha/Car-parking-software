@@ -46,6 +46,18 @@ def _save_upload(f: Optional[UploadFile], sub: str) -> Optional[str]:
     return rel
 
 
+@router.get("/uploads/{path:path}")
+def uploaded_file(path: str, user: User = Depends(supervisor)):
+    """Handover cash photos and deposit slips (supervisor/admin only)."""
+    from fastapi.responses import FileResponse
+
+    root = Path(get_settings().upload_root).resolve()
+    full = (root / path).resolve()
+    if root not in full.parents or not full.is_file():
+        raise HTTPException(404, "file not found")
+    return FileResponse(full, headers={"Cache-Control": "private, max-age=3600"})
+
+
 # ------------------------------------------------------------------ review queue
 @router.get("/review")
 def review_queue(db: Session = Depends(get_db), user: User = Depends(supervisor)):
@@ -204,7 +216,9 @@ def deposit_create(business_date: str = Form(...), amount_paise: int = Form(...)
 @router.get("/cash/deposits")
 def deposit_list(db: Session = Depends(get_db), user: User = Depends(supervisor)):
     return [{"id": d.id, "business_date": d.business_date, "amount_paise": d.amount_paise, "slip_ref": d.slip_ref,
-             "slip_photo_path": d.slip_photo_path, "deposited_by": d.deposited_by, "deposited_at": iso(d.deposited_at),
+             "slip_photo_path": d.slip_photo_path, "slip_photo_url": f"/api/uploads/{d.slip_photo_path}" if d.slip_photo_path else None,
+             "deposited_by": d.deposited_by, "deposited_by_name": (db.get(User, d.deposited_by).name if d.deposited_by else None),
+             "deposited_at": iso(d.deposited_at),
              "bank_status": d.bank_status, "bank_credited_paise": d.bank_credited_paise, "note": d.note}
             for d in db.scalars(select(BankDeposit).order_by(BankDeposit.id.desc()).limit(100))]
 

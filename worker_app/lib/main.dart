@@ -30,9 +30,7 @@ class ParkingWorkerApp extends StatelessWidget {
           useMaterial3: true,
           visualDensity: VisualDensity.standard,
         ),
-        home: Consumer<AppState>(
-          builder: (_, s, _) => s.loggedIn ? const HomeScreen() : const LoginScreen(),
-        ),
+        home: Consumer<AppState>(builder: (_, s, _) => s.loggedIn ? const HomeScreen() : const LoginScreen()),
       ),
     );
   }

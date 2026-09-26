@@ -77,7 +77,10 @@ class _UpiPayScreenState extends State<UpiPayScreen> {
       return;
     }
     try {
-      final p = await _app.api.payUpi(_r.paymentBody(phone: _phone, clientUuid: _clientUuid, parkedLocation: widget.parkedLocation));
+      if (!_app.online) throw NetworkException('offline');
+      final p = await _app.api.payUpi(
+        _r.paymentBody(phone: _phone, clientUuid: _clientUuid, parkedLocation: widget.parkedLocation),
+      );
       _adopt(p);
     } on NetworkException {
       _goLocal();
@@ -141,7 +144,12 @@ class _UpiPayScreenState extends State<UpiPayScreen> {
     setState(() {
       _txnRef = ref;
       _qrData = upiIntentUri(
-          vpa: s.upiVpa, payee: s.upiPayeeName, amountPaise: _r.payablePaise, txnRef: ref, note: 'Parking ${_r.target.plate}');
+        vpa: s.upiVpa,
+        payee: s.upiPayeeName,
+        amountPaise: _r.payablePaise,
+        txnRef: ref,
+        note: 'Parking ${_r.target.plate}',
+      );
       _stage = _Stage.offlineLocal;
     });
   }
@@ -227,7 +235,12 @@ class _UpiPayScreenState extends State<UpiPayScreen> {
   }
 
   Future<void> _addPhone() async {
-    final p = await textPrompt(context, 'Customer mobile for the receipt', label: '10-digit mobile', keyboard: TextInputType.phone);
+    final p = await textPrompt(
+      context,
+      'Customer mobile for the receipt',
+      label: '10-digit mobile',
+      keyboard: TextInputType.phone,
+    );
     final n = normalisePhone(p);
     if (p != null && n == null && mounted) {
       showSnack(context, 'Enter a 10-digit mobile number', error: true);
@@ -260,24 +273,30 @@ class _UpiPayScreenState extends State<UpiPayScreen> {
       case _Stage.error:
         return Padding(
           padding: const EdgeInsets.all(24),
-          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            const Icon(Icons.error_outline, size: 64, color: dueRed),
-            const SizedBox(height: 12),
-            Text(_error ?? 'Error', textAlign: TextAlign.center, style: const TextStyle(fontSize: 17)),
-            const SizedBox(height: 24),
-            BigButton(label: 'Back', onPressed: () => Navigator.pop(context, false)),
-          ]),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 64, color: dueRed),
+              const SizedBox(height: 12),
+              Text(_error ?? 'Error', textAlign: TextAlign.center, style: const TextStyle(fontSize: 17)),
+              const SizedBox(height: 24),
+              BigButton(label: 'Back', onPressed: () => Navigator.pop(context, false)),
+            ],
+          ),
         );
       case _Stage.failed:
         return Padding(
           padding: const EdgeInsets.all(24),
-          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            const Icon(Icons.cancel, size: 80, color: dueRed),
-            const SizedBox(height: 12),
-            const Text('Payment failed', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 24),
-            BigButton(label: 'Try again', onPressed: () => Navigator.pop(context, false)),
-          ]),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.cancel, size: 80, color: dueRed),
+              const SizedBox(height: 12),
+              const Text('Payment failed', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 24),
+              BigButton(label: 'Try again', onPressed: () => Navigator.pop(context, false)),
+            ],
+          ),
         );
       case _Stage.confirmed:
         return _done(
@@ -288,7 +307,8 @@ class _UpiPayScreenState extends State<UpiPayScreen> {
       case _Stage.claimed:
         return _done(
           title: 'Recorded ${rupees(_r.payablePaise)}',
-          subtitle: 'UPI claimed offline — it will be verified against the bank settlement. '
+          subtitle:
+              'UPI claimed offline — it will be verified against the bank settlement. '
               '${_phone != null ? 'The receipt goes by SMS once verified.' : 'The receipt is issued once verified.'}',
           receipt: null,
         );
@@ -302,104 +322,143 @@ class _UpiPayScreenState extends State<UpiPayScreen> {
   Widget _qrView() {
     final offline = _stage != _Stage.waiting;
     final size = MediaQuery.of(context).size.width - 48;
-    return ListView(padding: const EdgeInsets.all(16), children: [
-      Center(child: PlateText(_r.target.displayPlate, size: 20)),
-      const SizedBox(height: 8),
-      Center(
-        child: Text(rupees(_r.payablePaise), style: const TextStyle(fontSize: 40, fontWeight: FontWeight.w900, color: upiBlue)),
-      ),
-      Center(child: Text(_r.describe(), style: const TextStyle(color: Colors.black54))),
-      const SizedBox(height: 12),
-      if (_qrData != null)
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Center(child: PlateText(_r.target.displayPlate, size: 20)),
+        const SizedBox(height: 8),
         Center(
-          child: Container(
-            color: Colors.white,
-            padding: const EdgeInsets.all(8),
-            child: QrImageView(data: _qrData!, size: size.clamp(200, 380).toDouble(), backgroundColor: Colors.white),
+          child: Text(
+            rupees(_r.payablePaise),
+            style: const TextStyle(fontSize: 40, fontWeight: FontWeight.w900, color: upiBlue),
           ),
         ),
-      const SizedBox(height: 12),
-      if (!offline) ...[
-        const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
-          SizedBox(width: 10),
-          Text('Waiting for payment…', style: TextStyle(fontSize: 18)),
-        ]),
-        if (_pollFailures >= 3) ...[
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(10),
-            color: Colors.orange.shade50,
-            child: const Text(
-                'Server unreachable. If the customer paid, the payment still confirms automatically from the bank. You can move on.',
-                style: TextStyle(color: Colors.deepOrange)),
-          ),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Move on')),
-        ],
-      ] else ...[
-        Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(8)),
-          child: Text(
-            _stage == _Stage.offlineLocal
-                ? 'Server offline: QR made on this phone. Ask the customer to show the success screen.'
-                : 'Payment gateway offline: ask the customer to show the success screen.',
-            style: const TextStyle(color: Colors.deepOrange),
-          ),
+        Center(
+          child: Text(_r.describe(), style: const TextStyle(color: Colors.black54)),
         ),
         const SizedBox(height: 12),
-        BigButton(
-          label: 'Customer shows success',
-          icon: Icons.verified,
-          color: paidGreen,
-          onPressed: _busy ? null : _customerShowsSuccess,
+        if (_qrData != null)
+          Center(
+            child: Container(
+              color: Colors.white,
+              padding: const EdgeInsets.all(8),
+              child: QrImageView(data: _qrData!, size: size.clamp(200, 380).toDouble(), backgroundColor: Colors.white),
+            ),
+          ),
+        const SizedBox(height: 12),
+        if (!offline) ...[
+          const Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+              SizedBox(width: 10),
+              Text('Waiting for payment…', style: TextStyle(fontSize: 18)),
+            ],
+          ),
+          if (_pollFailures >= 3) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              color: Colors.orange.shade50,
+              child: const Text(
+                'Server unreachable. If the customer paid, the payment still confirms automatically from the bank. You can move on.',
+                style: TextStyle(color: Colors.deepOrange),
+              ),
+            ),
+            TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Move on')),
+          ],
+        ] else ...[
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(8)),
+            child: Text(
+              _stage == _Stage.offlineLocal
+                  ? 'Server offline: QR made on this phone. Ask the customer to show the success screen.'
+                  : 'Payment gateway offline: ask the customer to show the success screen.',
+              style: const TextStyle(color: Colors.deepOrange),
+            ),
+          ),
+          const SizedBox(height: 12),
+          BigButton(
+            label: 'Customer shows success',
+            icon: Icons.verified,
+            color: paidGreen,
+            onPressed: _busy ? null : _customerShowsSuccess,
+          ),
+        ],
+        if (_txnRef != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Center(
+              child: Text(
+                'Ref $_txnRef',
+                style: const TextStyle(fontFamily: 'monospace', color: Colors.black45),
+              ),
+            ),
+          ),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: _addPhone,
+          icon: const Icon(Icons.sms),
+          label: Text(_phone == null ? 'Add customer mobile for SMS receipt (optional)' : 'Receipt to ${_phone!}'),
+        ),
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.pop(context, false),
+          child: const Text('Customer did not pay / switch to cash'),
         ),
       ],
-      if (_txnRef != null)
-        Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Center(child: Text('Ref $_txnRef', style: const TextStyle(fontFamily: 'monospace', color: Colors.black45))),
-        ),
-      const SizedBox(height: 12),
-      OutlinedButton.icon(
-        onPressed: _addPhone,
-        icon: const Icon(Icons.sms),
-        label: Text(_phone == null ? 'Add customer mobile for SMS receipt (optional)' : 'Receipt to ${_phone!}'),
-      ),
-      TextButton(
-        onPressed: _busy ? null : () => Navigator.pop(context, false),
-        child: const Text('Customer did not pay / switch to cash'),
-      ),
-    ]);
+    );
   }
 
   Widget _done({required String title, required String subtitle, ReceiptInfo? receipt}) {
     final showQr = receipt != null && !receipt.toPhone && receipt.link != null;
-    return ListView(padding: const EdgeInsets.all(24), children: [
-      const Icon(Icons.check_circle, color: Colors.white, size: 96),
-      const SizedBox(height: 8),
-      Text(title, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 34, fontWeight: FontWeight.w900)),
-      const SizedBox(height: 6),
-      Text(subtitle, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 16)),
-      const SizedBox(height: 6),
-      Center(child: PlateText(_r.target.displayPlate, size: 20)),
-      const SizedBox(height: 16),
-      if (receipt != null && receipt.toPhone)
-        Text('Receipt sent by ${receipt.channel == 'WHATSAPP' ? 'WhatsApp' : 'SMS'}',
-            textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
-      if (showQr) ...[
-        const Text('Customer can scan for the receipt', textAlign: TextAlign.center, style: TextStyle(color: Colors.white)),
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        const Icon(Icons.check_circle, color: Colors.white, size: 96),
         const SizedBox(height: 8),
-        Center(
-          child: Container(
-            color: Colors.white,
-            padding: const EdgeInsets.all(10),
-            child: QrImageView(data: receipt.link!, size: 240, backgroundColor: Colors.white),
+        Text(
+          title,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: Colors.white, fontSize: 34, fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          subtitle,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: Colors.white, fontSize: 16),
+        ),
+        const SizedBox(height: 6),
+        Center(child: PlateText(_r.target.displayPlate, size: 20)),
+        const SizedBox(height: 16),
+        if (receipt != null && receipt.toPhone)
+          Text(
+            'Receipt sent by ${receipt.channel == 'WHATSAPP' ? 'WhatsApp' : 'SMS'}',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
           ),
+        if (showQr) ...[
+          const Text(
+            'Customer can scan for the receipt',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white),
+          ),
+          const SizedBox(height: 8),
+          Center(
+            child: Container(
+              color: Colors.white,
+              padding: const EdgeInsets.all(10),
+              child: QrImageView(data: receipt.link!, size: 240, backgroundColor: Colors.white),
+            ),
+          ),
+        ],
+        const SizedBox(height: 24),
+        BigButton(
+          label: 'Done — next vehicle',
+          color: Colors.white.withValues(alpha: 0.25),
+          onPressed: () => Navigator.pop(context, true),
         ),
       ],
-      const SizedBox(height: 24),
-      BigButton(label: 'Done — next vehicle', color: Colors.white.withValues(alpha: 0.25), onPressed: () => Navigator.pop(context, true)),
-    ]);
+    );
   }
 }
