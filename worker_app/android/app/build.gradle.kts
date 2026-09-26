@@ -34,6 +34,7 @@ android {
             // Sideloaded fleet app: signed with the debug key unless a release keystore is configured
             // (see worker_app/README.md, "Release signing").
             signingConfig = signingConfigs.getByName("debug")
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 }
