@@ -37,9 +37,11 @@ Dashboard → Configuration without code changes.
     ("unrecovered one-time dues"); no recovery process.
 
 ## Phase 2 — ANPR
-12. No trained model weights are shipped. The `ClassicalRecognizer` reads only the synthetic demo
-    video; production uses `LocalOnnxRecognizer` with models trained on site footage (scripts
-    provided) or the commercial Plate Recognizer adapter. See the licence table in `docs/ANPR.md`.
+12. Production uses our own `TrainedRecognizer` (`recognizer.kind: trained`): a plate finder and a
+    plate reader trained only on computer-generated Indian plates, shipped in `anpr/models/`, no
+    third-party service or dataset. It is expected to need the one-week site fine-tune
+    (`docs/ANPR.md` section 9) to reach the accuracy targets. The `ClassicalRecognizer` reads only
+    the synthetic demo video; the `onnx` and commercial adapters remain as alternatives.
 13. `gate_span` (which fraction of the gate width each camera covers) is an ANPR-side camera setting
     used to merge unread detections across the two cameras.
 14. Late reads arriving after an event was emitted are suppressed (the event contract has no update

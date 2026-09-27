@@ -84,4 +84,5 @@ def test_trained_replay_end_to_end(synthetic_gate: tuple[Path, dict[str, Any]], 
     readable = {v["plate"] for v in gt["vehicles"] if not v["unreadable"]}
     reads = {e["plate"] for e in result.events if e["status"] == "READ"}
     assert len(reads & readable) >= len(readable) - 1, (reads, readable)
-    assert len(result.events) <= len(gt["vehicles"]) + 1
+    assert not reads - readable, "a wrong plate was reported as READ"
+    assert len(result.events) == len(gt["vehicles"])  # one event per vehicle

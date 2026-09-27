@@ -360,6 +360,23 @@ that are *not* plates.
 Each `.onnx` has a `.json` next to it with the alphabet and the validation
 scores it reached on held-out generated images.
 
+**Results before any real footage** (held-out generated images, deliberately
+hard: plates down to 48 px wide, blur, glare, night IR):
+
+| | Result |
+|---|---|
+| Reader, whole plate right from **one** frame | 78% (day 80%, night 75%; two-row 87%, one-row 57%) |
+| Reader, characters right | 94% |
+| Reader, whole plate right when its confidence ≥ 0.7 (about 60% of reads) | 99.4% |
+| Finder, plates found / detections that are real plates | 90% / 92% |
+| Demo gate videos (drawn by a *different* program than the training images) | 5 of 6 plates READ correctly, 0 wrong plates, the 6th sent to the worker as UNREAD; one event per vehicle |
+| Speed on CPU | finder ~25–50 ms per 4 MP frame, reader ~6 ms per plate |
+
+The pipeline votes over the 5–15 frames in which each plate is visible, so a
+passing vehicle is read more reliably than one frame suggests. None of this
+is a promise about real plates: real cameras differ from any generator, and
+the site week (9.2) is what gets it to the 95% / 90% target.
+
 **Select it**: `recognizer.kind: trained` (or `ANPR_RECOGNIZER=trained`).
 Options under `recognizer.trained`: `finder_model`, `reader_model` (relative
 paths resolve against `anpr/`), `finder_width`, `finder_threshold`,
@@ -410,8 +427,11 @@ local mix of fonts and dirt). One week of real footage fixes most of it:
    ```
    Keep ~300 labelled crops aside and check them with
    `python -m anpr_service evaluate` (section 5) before and after.
-5. **Deploy**: copy the new `plate_reader.onnx` + `.json` into `anpr/models/`
-   and `docker compose up -d --build anpr`. Keep the previous file to roll back.
+5. **Deploy**: copy the new `plate_reader.onnx` + `.json` to `/srv/parking/models/`
+   (mounted at `/models` in the container), set
+   `recognizer.trained.reader_model: /models/plate_reader.onnx` in `deploy/config/site.yaml`
+   and `docker compose restart anpr`. To roll back, point it at `models/plate_reader.onnx`
+   (the bundled synthetic-only model) again.
 
 Repeat step 2–5 after a month (and after the first monsoon week) with the
 crops the reader was least sure about.

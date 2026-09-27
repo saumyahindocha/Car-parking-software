@@ -26,10 +26,19 @@ backend:
   timeout_s: 3
 
 recognizer:
+  # trained    - our own plate finder + reader (models/plate_*.onnx, CPU, no outside service). Recommended.
+  #              Fine-tune it on the site week's crops: docs/ANPR.md section 9.
   # classical  - pure OpenCV, reads the synthetic demo videos only (no models needed)
   # onnx       - local detector + CRNN OCR on ONNX Runtime (CUDA/TensorRT on the edge GPU)
   # commercial - Plate Recognizer Snapshot API / on-prem SDK (regions=in)
-  kind: ${ANPR_RECOGNIZER:-classical}
+  kind: ${ANPR_RECOGNIZER:-trained}
+  trained:
+    finder_model: models/plate_finder.onnx   # relative to anpr/ (/app in the image)
+    reader_model: models/plate_reader.onnx   # replace with the site fine-tuned file after the site week
+    finder_width: 960
+    finder_threshold: 0.35
+    whole_frame_plates: true
+    threads: 2
   onnx:
     detector_model: /models/vehicle_plate_detector.onnx
     detector_format: auto            # yolov8 (1,4+nc,N) | yolov5/YOLOX (1,N,5+nc)
