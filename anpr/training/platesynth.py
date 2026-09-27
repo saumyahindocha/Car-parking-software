@@ -49,6 +49,9 @@ def random_plate_text(rng: random.Random) -> tuple[str, list[str], str]:
     d = f"{dist:02d}" if rng.random() < 0.93 else str(dist % 10 or 1)
     nl = rng.choices([0, 1, 2, 3], [3, 18, 74, 5])[0]
     series = "".join(rng.choice(SERIES_LETTERS) for _ in range(nl))
+    if st == "DL" and rng.random() < 0.7:  # Delhi: DL 3C AF 1234 / DL 8S AB 1234 (1-digit district + category)
+        d = str(rng.randint(1, 13))
+        series = rng.choice("CSEPRTVY") + "".join(rng.choice(SERIES_LETTERS) for _ in range(rng.choice([1, 2, 2])))
     num = rng.randint(1, 9999)
     num_s = f"{num:04d}"
     g = [st, d] + ([series] if series else []) + [num_s]
@@ -89,6 +92,17 @@ def available_fonts() -> tuple[tuple[str, int], ...]:
     return tuple(found)
 
 
+# OpenCV's built-in stroke fonts (thin/thick line-drawn digits, like many hand-painted and
+# older embossed plates). Encoded as pseudo paths "hershey:<face>:<thickness factor>".
+_HERSHEY = [("hershey:0:0.06", 1), ("hershey:0:0.10", 1), ("hershey:0:0.16", 1), ("hershey:1:0.12", 1), ("hershey:2:0.10", 1),
+            ("hershey:3:0.14", 1), ("hershey:4:0.12", 1)]
+
+
+def plate_fonts() -> tuple[tuple[str, int], ...]:
+    """Typefaces for the registration characters: TrueType fonts plus stroke fonts."""
+    return available_fonts() + tuple(_HERSHEY)
+
+
 @lru_cache(maxsize=256)
 def _font(path: str, size: int) -> ImageFont.FreeTypeFont:
     return ImageFont.truetype(path, size)
@@ -97,6 +111,15 @@ def _font(path: str, size: int) -> ImageFont.FreeTypeFont:
 @lru_cache(maxsize=4096)
 def _glyph(path: str, size: int, ch: str) -> np.ndarray:
     """Tight alpha mask of one character."""
+    if path.startswith("hershey:"):
+        _, face, thick = path.split(":")
+        scale = cv2.getFontScaleFromHeight(int(face), size, 1)
+        th = max(1, int(round(size * float(thick))))
+        (tw, tht), base = cv2.getTextSize(ch, int(face), scale, th)
+        a = np.zeros((tht + base + 2 * th + 8, tw + 2 * th + 8), np.uint8)
+        cv2.putText(a, ch, (th + 4, tht + th + 4), int(face), scale, 255, th, cv2.LINE_AA)
+        ys, xs = np.nonzero(a > 20)
+        return a[ys.min(): ys.max() + 1, xs.min(): xs.max() + 1] if len(xs) else a
     f = _font(path, size)
     l, t, r, b = f.getbbox(ch)
     img = Image.new("L", (r - l + 4, b - t + 4), 0)
@@ -154,8 +177,9 @@ def render_plate(rng: random.Random, text_groups: Optional[tuple[list[str], str]
     two_line = rng.random() < 0.72 if two_line is None else two_line
     style = style or pick_style(rng)
     rows = _layout_rows(groups, kind, two_line, rng)
-    fonts = available_fonts()
-    fpath = rng.choices([f for f, _ in fonts], [w for _, w in fonts])[0]
+    fonts = available_fonts()  # decorations (IND strip, dealer text)
+    pf = plate_fonts()
+    fpath = rng.choices([f for f, _ in pf], [w for _, w in pf])[0]
     squeeze = rng.uniform(0.55, 0.8) if style.name == "hsrp" else rng.uniform(0.6, 1.05)
 
     # glyph masks per row, then plate size from content

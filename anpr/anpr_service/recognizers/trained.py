@@ -136,7 +136,34 @@ class PlateFinder:
             bw, bh = float(np.exp(wh[0, y, x])) * s, float(np.exp(wh[1, y, x])) * s
             cx, cy = (x + float(off[0, y, x])) * s, (y + float(off[1, y, x])) * s
             out.append(((cx - bw / 2) / sx, (cy - bh / 2) / sy, (cx + bw / 2) / sx, (cy + bh / 2) / sy, float(hm[y, x])))
-        return out
+        return merge_split_plates(out)
+
+
+def merge_split_plates(boxes: list[tuple[float, float, float, float, float]]) -> list[tuple[float, float, float, float, float]]:
+    """Join boxes that overlap on the same text line into one plate.
+
+    A long one-row plate can light up two heatmap peaks (its left and right
+    halves); two real plates never overlap each other, so any overlap on the
+    same line means one plate.
+    """
+    out = sorted(boxes, key=lambda b: -b[4])
+    merged = True
+    while merged:
+        merged = False
+        for i in range(len(out)):
+            for j in range(i + 1, len(out)):
+                a, b = out[i], out[j]
+                ix = min(a[2], b[2]) - max(a[0], b[0])
+                iy = min(a[3], b[3]) - max(a[1], b[1])
+                if ix <= 0 or iy <= 0.5 * min(a[3] - a[1], b[3] - b[1]):
+                    continue
+                out[i] = (min(a[0], b[0]), min(a[1], b[1]), max(a[2], b[2]), max(a[3], b[3]), max(a[4], b[4]))
+                del out[j]
+                merged = True
+                break
+            if merged:
+                break
+    return out
 
 
 class TrainedRecognizer(ClassicalRecognizer):
