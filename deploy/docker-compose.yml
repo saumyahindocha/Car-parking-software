@@ -1,5 +1,7 @@
-# Edge server stack (Ubuntu 24.04, NVIDIA GPU). Everything that records entries/exits runs here
-# and keeps working without internet. Start with ./install.sh, or:  docker compose up -d
+# Edge server stack (Ubuntu 24.04). Everything that records entries/exits runs here and keeps
+# working without internet. Start with ./install.sh, or:  docker compose up -d
+# CPU only by default (our plate models run on the CPU). With an NVIDIA GPU, install.sh adds
+# docker-compose.gpu.yml through COMPOSE_FILE in .env.
 name: parking
 
 services:
@@ -11,7 +13,7 @@ services:
       POSTGRES_USER: parking
       POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
       TZ: Asia/Kolkata
-    command: ["postgres", "-c", "shared_buffers=2GB", "-c", "effective_cache_size=8GB", "-c", "max_connections=100",
+    command: ["postgres", "-c", "shared_buffers=${PG_SHARED_BUFFERS:-2GB}", "-c", "effective_cache_size=${PG_CACHE_SIZE:-8GB}", "-c", "max_connections=100",
               "-c", "wal_compression=on", "-c", "checkpoint_timeout=15min"]
     volumes:
       - ${PG_DATA_DIR:-/srv/parking/pgdata}:/var/lib/postgresql/data     # NVMe
@@ -37,10 +39,12 @@ services:
       PARK_DATABASE_URL: postgresql+psycopg://parking:${DB_PASSWORD}@db:5432/parking
       PARK_IMAGE_ROOT: /data/images
       PARK_UPLOAD_ROOT: /data/uploads
+      PARK_WORKER_WEB_DIST: /app/worker_web
       TZ: Asia/Kolkata
     volumes:
       - ${IMAGE_DIR:-/srv/parking/images}:/data/images                # 4 TB HDD
       - ${UPLOAD_DIR:-/srv/parking/uploads}:/data/uploads
+      - ${WORKER_WEB_DIR:-/srv/parking/worker-web}:/app/worker_web:ro # phone app (install.sh downloads it)
     ports:
       - "127.0.0.1:8000:8000"          # host-local only; the LAN reaches it through the HTTPS gateway
     stop_grace_period: 20s
@@ -65,7 +69,11 @@ services:
   anpr:
     build:
       context: ../anpr
+      args:
+        BASE_IMAGE: ubuntu:24.04
+        ONNX_PACKAGE: onnxruntime
     image: parking-anpr:latest
+    user: "1001"          # same user as the backend: it deletes old plate images (privacy retention)
     restart: unless-stopped
     depends_on:
       - backend
@@ -80,10 +88,3 @@ services:
       - ${IMAGE_DIR:-/srv/parking/images}:/data/images
       - ${ANPR_STATE_DIR:-/srv/parking/anpr}:/data/anpr               # durable event outbox
       - ${MODEL_DIR:-/srv/parking/models}:/models:ro
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]

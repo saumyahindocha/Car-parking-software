@@ -181,6 +181,7 @@ class TrainedRecognizer(ClassicalRecognizer):
         self.finder = PlateFinder(resolve_model(t.finder_model), t.finder_width, t.finder_threshold, t.threads)
         self.reader = PlateReader(resolve_model(t.reader_model), t.threads)
         self._frame_plates: list[PlateObservation] | None = None
+        self._analyzing = False
 
     def _plates_in_frame(self, frame: np.ndarray) -> list[PlateObservation]:
         # analyze() calls find_plates once per motion blob; run the finder once per frame.
@@ -195,6 +196,8 @@ class TrainedRecognizer(ClassicalRecognizer):
             if box[0] <= 1 or box[1] <= 1 or box[2] >= fw - 1 or box[3] >= fh - 1:
                 continue  # cut off by the frame edge
             plates.append(PlateObservation(box=box, score=score))
+        if self._analyzing:
+            self._frame_plates = plates
         return plates
 
     def find_plates(self, frame: np.ndarray, box: Box) -> list[PlateObservation]:
@@ -206,15 +209,19 @@ class TrainedRecognizer(ClassicalRecognizer):
         return out
 
     def analyze(self, frame, roi_mask=None):
-        self._frame_plates = self._plates_in_frame(frame)
+        # The finder runs only when a motion blob asks for plates (find_plates), plus a
+        # whole-frame scan every few frames for plates without a blob around them.
+        self._analyzing, self._frame_plates = True, None
         try:
             return self._analyze(frame, roi_mask)
         finally:
-            self._frame_plates = None
+            self._analyzing, self._frame_plates = False, None
 
     def _analyze(self, frame, roi_mask):
         vehicles = super().analyze(frame, roi_mask)
         if not self.tcfg.whole_frame_plates or self._frames <= self.cfg.warmup_frames:
+            return vehicles
+        if self._frame_plates is None and self._frames % max(1, self.tcfg.idle_scan_every):
             return vehicles
         # A plate with no motion blob around it (vehicle stopped long enough to melt
         # into the background, or a dark bike on dark asphalt) still gets reported.

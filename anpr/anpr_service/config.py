@@ -161,7 +161,8 @@ class TrainedConfig(_Model):
     finder_width: int = 960  # frames are scaled to this width for the plate finder (multiple of 16)
     finder_threshold: float = 0.35
     whole_frame_plates: bool = True  # also report plates on vehicles the motion detector missed
-    threads: int = 2
+    idle_scan_every: int = 5  # with no motion, scan the whole frame for plates every N frames
+    threads: int = 1  # per camera process; cameras already run in parallel
 
 
 class RecognizerConfig(_Model):

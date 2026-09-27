@@ -1,0 +1,16 @@
+# NVIDIA GPU add-on for the ANPR service (only the optional `onnx` engine uses the GPU; our own
+# `trained` engine runs on the CPU). install.sh enables it when nvidia-smi works, via
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml   in .env
+services:
+  anpr:
+    build:
+      args:
+        BASE_IMAGE: nvidia/cuda:12.6.3-cudnn-runtime-ubuntu24.04
+        ONNX_PACKAGE: onnxruntime-gpu
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

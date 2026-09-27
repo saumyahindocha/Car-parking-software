@@ -38,7 +38,8 @@ recognizer:
     finder_width: 960
     finder_threshold: 0.35
     whole_frame_plates: true
-    threads: 2
+    idle_scan_every: 5               # no motion: look for plates every 5th frame only
+    threads: 1                       # per camera
   onnx:
     detector_model: /models/vehicle_plate_detector.onnx
     detector_format: auto            # yolov8 (1,4+nc,N) | yolov5/YOLOX (1,N,5+nc)

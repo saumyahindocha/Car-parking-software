@@ -5,15 +5,15 @@ set -euo pipefail
 cd "$(dirname "$0")"
 [[ -f .env ]] && { set -a; source .env; set +a; }
 : "${BACKUP_DIR:?BACKUP_DIR not set}"
-PGHOST=${PGHOST:-127.0.0.1} PGPORT=${PGPORT:-5432} PGUSER=${PGUSER:-parking} PGDATABASE=${PGDATABASE:-parking}
-export PGHOST PGPORT PGUSER PGDATABASE PGPASSWORD=${PGPASSWORD:-$DB_PASSWORD}
+# PostgreSQL tools run inside the db container, so they always match the server version.
+pgx() { docker compose exec -T -e PGPASSWORD="$DB_PASSWORD" db "$@"; }
 mkdir -p "$BACKUP_DIR"
 if ! mountpoint -q "$(df --output=target "$BACKUP_DIR" | tail -1)" && [[ "${ALLOW_LOCAL_BACKUP:-0}" != 1 ]]; then
   echo "WARNING: $BACKUP_DIR is not on a mounted external disk" >&2
 fi
 stamp=$(date +%Y%m%d-%H%M%S)
 out="$BACKUP_DIR/parking-$stamp.dump"
-pg_dump -Fc -Z 6 --no-owner -f "$out.tmp"
+pgx pg_dump -U parking -d parking -Fc -Z 6 --no-owner > "$out.tmp"
 mv "$out.tmp" "$out"
 sha256sum "$out" > "$out.sha256"
 # the site certificate authority: if it is lost, every phone and alert unit must re-trust a new one

@@ -35,25 +35,65 @@ Things to try: pay for a vehicle from the worker flow (`POST /api/payments/upi`,
 `POST /api/demo/pay/{id}`), switch the gateway off (`POST /api/demo/gateway {"online":false}`) to see
 the offline UPI path, run the full-day simulator (`cd backend && python -m sim.simulator`).
 
+## 1b. Rehearsal install on any PC (Windows + WSL2 is fine)
+
+This is the **real installer** (same Docker images, database, HTTPS gateway, phone app, ANPR with
+our plate models, backups) with three differences: demo videos loop as the cameras, payments and
+SMS are pretend, and demo staff logins are added. Use it to practise the install and to try the
+phone app over Wi-Fi before the site PC arrives. Nothing here touches Windows itself.
+
+**Windows 11 only, once — let phones on your Wi-Fi reach WSL2** ("mirrored" networking):
+1. In Windows, open Notepad, paste the two lines below and save as `%UserProfile%\.wslconfig`
+   (File name `".wslconfig"` with the quotes, Save as type *All files*):
+   ```ini
+   [wsl2]
+   networkingMode=mirrored
+   ```
+2. PowerShell **as administrator** (lets the phone connect to WSL2; run once):
+   ```powershell
+   Set-NetFirewallHyperVVMSetting -Name '{40E0AC32-46A5-438A-A0B2-2B479E8F2E90}' -DefaultInboundAction Allow
+   wsl --shutdown
+   ```
+3. Open Ubuntu again. `hostname -I` should now print your PC's Wi-Fi address (e.g. `192.168.1.23`),
+   not `172.x.x.x`.
+
+**Install** (Ubuntu terminal; Docker Desktop with WSL integration, or none — the installer adds Docker):
+```bash
+cd ~/Car-parking-software && git pull
+cd deploy && sudo ./install.sh --test     # 15–25 min the first time; asks for an admin name + password
+sudo ./check.sh                           # every line should say PASS (a couple of WARN is fine)
+```
+Then:
+* **PC**: open `http://<address>/site-ca.crt`, install it (§2a), then `https://<address>` → log in as your admin.
+* **iPhone** on the same Wi-Fi: install the certificate (§2a), open `https://<address>/app` in Safari
+  → Share → *Add to Home Screen*. Log in as worker `w1`, PIN `1111`.
+* Within a minute, bikes enter at Gate 1 and leave at Gate 2 every ~80 s; collect a fee in the app
+  (the pretend gateway marks UPI as paid), take cash, hand over a shift, look at the dashboard.
+
+Stop / start: `cd deploy && sudo docker compose stop` / `sudo docker compose up -d`.
+Remove everything: `sudo docker compose down && sudo rm -rf /srv/parking deploy/.env deploy/config/site.yaml`.
+
 ---
 
 ## 2. Edge server
 
-Hardware: 8-core CPU, 32 GB RAM, NVIDIA GPU 12–16 GB, 1 TB NVMe (OS + DB), 4 TB HDD (images),
-dual NIC, online UPS, dual WAN (broadband + 4G/5G failover router).
+Hardware: 8-core CPU, 32 GB RAM, 1 TB NVMe (OS + DB), 4 TB HDD (images), dual NIC, online UPS,
+dual WAN (broadband + 4G/5G failover router). A GPU is **optional**: our plate models run on the
+CPU. (It is only used by the alternative `onnx` engine; the installer enables it when `nvidia-smi` works.)
 
 1. Install **Ubuntu 24.04 LTS Server**. Set the static IP, hostname `parking-edge`, timezone
-   `Asia/Kolkata`. Install the NVIDIA driver (`sudo ubuntu-drivers install`, reboot, check `nvidia-smi`).
+   `Asia/Kolkata`. Only with a GPU: install the NVIDIA driver (`sudo ubuntu-drivers install`, reboot, check `nvidia-smi`).
 2. Mount the 4 TB HDD at `/mnt/images` and the external backup disk at `/mnt/backup` (add to
    `/etc/fstab` with `nofail`).
 3. Clone this repository to `/opt/parking` and run the installer:
    ```bash
    sudo git clone <repo-url> /opt/parking && cd /opt/parking/deploy
-   sudo ./install.sh          # first run writes deploy/.env with generated secrets and stops
-   sudo nano .env             # gateway + SMS credentials, relay URL, storage paths, backup settings
-   sudo ./install.sh          # builds images, starts db/backend/anpr, creates the first admin, cron, systemd
+   sudo ./install.sh          # writes deploy/.env with generated secrets, builds, starts, asks for the admin
+   sudo nano .env             # gateway + SMS credentials, storage paths, backup settings
+   sudo ./install.sh          # re-run after editing .env (safe: keeps data, secrets and the admin)
+   sudo ./check.sh            # health check incl. a real backup + restore test: all PASS before go-live
    ```
-   The installer sets up Docker, the NVIDIA container toolkit, **chrony as the site NTP server**,
+   The installer sets up Docker, the phone app, the NVIDIA container toolkit (only with a GPU), **chrony as the site NTP server**,
    the firewall (API and NTP open to the LAN only), nightly backups (02:30) and a weekly automated
    restore test (Sunday 04:00), and a systemd unit (`parking.service`) that starts the stack at boot.
 4. Install the site certificate on your PC (§2a), open `https://192.168.10.10`, log in as the admin, then in **Configuration**:
@@ -62,7 +102,8 @@ dual NIC, online UPS, dual WAN (broadband + 4G/5G failover router).
    * Tariffs and pass prices (defaults are seeded: ₹10 / 2 h, ₹5 per extra hour, ₹30 cap per 12 h,
      10 min grace; monthly pass ₹500; car class disabled).
    * Gates: direction per gate and time-of-day schedule; cameras (RTSP URLs, ROI, capture line,
-     IN vector) — see [CAMERA_SETUP.md](CAMERA_SETUP.md).
+     IN vector) — see [CAMERA_SETUP.md](CAMERA_SETUP.md). **The camera addresses entered here win over
+     `deploy/config/site.yaml`** (the seeded ones are placeholders: replace them with your cameras').
    * Zones, users (workers, guards, supervisors with PINs).
 5. Payment gateway (Razorpay): create API keys, enable **QR Codes**, add a webhook to
    `https://<relay-domain>/webhooks/razorpay` for the relay and — if the edge is reachable over a VPN/tunnel —
@@ -194,6 +235,7 @@ Re-uploading the same file is safe. From a server shell the same import is
 `docker compose exec backend python -m app.import_customers /path/file.xlsx [--commit]`.
 
 ## 7. Go-live checklist
+- [ ] `sudo ./check.sh` in `deploy/`: every line PASS (it includes a real backup + restore test).
 - [ ] All devices show the edge server's time (NTP) — check a camera OSD against the dashboard clock.
 - [ ] Live page: 4 ANPR + 2 overview cameras streaming, 2 alert units online, internet + gateway green.
 - [ ] Test ride in and out at each gate (single bike, two side by side, a two-line plate).
