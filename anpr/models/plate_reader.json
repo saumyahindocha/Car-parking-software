@@ -1,0 +1,29 @@
+{
+  "kind": "plate_reader",
+  "version": "synthetic-1",
+  "alphabet": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+  "max_len": 11,
+  "empty_index": 36,
+  "input": {
+    "height": 64,
+    "width": 128,
+    "channels": 1,
+    "pixels": "raw 0-255 grayscale, NCHW float32"
+  },
+  "output": "probs [N, max_len, 37]: slot k = k-th character (top row first); last class = empty",
+  "trained_on": "synthetic Indian plates (training/platesynth.py)",
+  "val_metrics": {
+    "plate_acc": 0.7831666666666667,
+    "char_acc": 0.9427272727272727,
+    "n": 6000,
+    "acc@conf>=0.5": 0.9583804569102014,
+    "coverage@conf>=0.5": 0.7368333333333333,
+    "acc@conf>=0.7": 0.9944258639910813,
+    "coverage@conf>=0.7": 0.598,
+    "acc@conf>=0.9": 1.0,
+    "coverage@conf>=0.9": 0.2916666666666667,
+    "epoch": 10,
+    "train_loss": 0.6950935002326966,
+    "minutes": 159.70943471590678
+  }
+}
