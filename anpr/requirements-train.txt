@@ -1,0 +1,6 @@
+# Training our own plate models (CPU is fine; a GPU just makes it faster). Not needed at runtime.
+-r requirements.txt
+onnxruntime>=1.17
+torch>=2.3
+onnx>=1.16
+# plus fonts: sudo apt install fonts-dejavu-core fonts-liberation fonts-freefont-ttf

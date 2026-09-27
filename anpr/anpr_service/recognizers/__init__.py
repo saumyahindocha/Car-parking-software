@@ -19,6 +19,10 @@ def create_recognizer(cfg: "ServiceConfig") -> PlateRecognizer:
     classical engine's background model) and are not shared between cameras.
     """
     kind = cfg.recognizer.kind
+    if kind == "trained":
+        from .trained import TrainedRecognizer
+
+        return TrainedRecognizer(cfg.recognizer.trained, cfg.recognizer.classical, cfg.pipeline.min_plate_width_px)
     if kind == "classical":
         from .classical import ClassicalRecognizer
 

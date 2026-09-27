@@ -149,8 +149,24 @@ class CommercialConfig(_Model):
     min_interval_s: float = 0.0  # throttle per camera (0 = every analysed frame)
 
 
+class TrainedConfig(_Model):
+    """Our own plate models (trained on computer-generated plates, fine-tuned on site footage).
+
+    Relative model paths resolve against the ``anpr/`` directory (``/app`` in the image), so the
+    bundled ``models/`` work out of the box; point them elsewhere after a site fine-tune.
+    """
+
+    finder_model: str = "models/plate_finder.onnx"
+    reader_model: str = "models/plate_reader.onnx"
+    finder_width: int = 960  # frames are scaled to this width for the plate finder (multiple of 16)
+    finder_threshold: float = 0.35
+    whole_frame_plates: bool = True  # also report plates on vehicles the motion detector missed
+    threads: int = 2
+
+
 class RecognizerConfig(_Model):
-    kind: Literal["classical", "onnx", "commercial"] = "classical"
+    kind: Literal["trained", "classical", "onnx", "commercial"] = "classical"
+    trained: TrainedConfig = Field(default_factory=TrainedConfig)
     classical: ClassicalConfig = Field(default_factory=ClassicalConfig)
     onnx: OnnxConfig = Field(default_factory=OnnxConfig)
     commercial: CommercialConfig = Field(default_factory=CommercialConfig)

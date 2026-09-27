@@ -38,6 +38,7 @@ RUN pip install --no-cache-dir -r requirements.txt "${ONNX_PACKAGE}>=1.17" scipy
 
 COPY anpr_service ./anpr_service
 COPY config ./config
+COPY models ./models
 COPY tools ./tools
 
 RUN useradd --system --uid 10001 --home /app anpr \

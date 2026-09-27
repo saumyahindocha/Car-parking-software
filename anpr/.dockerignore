@@ -5,3 +5,4 @@ tests/
 *.mp4
 *.avi
 demo/
+training/

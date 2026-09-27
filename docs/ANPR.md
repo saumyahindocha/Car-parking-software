@@ -123,9 +123,10 @@ class PlateRecognizer(ABC):
 |---|---|---|
 | `LocalOnnxRecognizer` | `onnx` | A YOLO-style detector ONNX (`yolov8` layout `(1,4+nc,N)` or `yolov5`/YOLOX `(1,N,5+nc)`), letterbox, class-aware NMS in NumPy, an optional second-stage plate detector, and a CRNN/CTC OCR ONNX run per row. Providers are tried in order: TensorRT, then CUDA, then CPU. `onnxruntime` is imported only when this engine is selected. |
 | `CommercialApiRecognizer` | `commercial` | Plate Recognizer Snapshot API (`Authorization: Token $PLATE_RECOGNIZER_API_KEY`) or the on-prem SDK URL, with `regions=in`. It detects and reads in one call. Each analysed frame is billable, so raise `pipeline.process_every_n` or `commercial.min_interval_s`. |
+| `TrainedRecognizer` | `trained` | **Our own models, no third-party service.** Vehicles from motion (MOG2, as in `classical`), plates from `models/plate_finder.onnx`, characters from `models/plate_reader.onnx`, both trained on computer-generated Indian plates (section 9). CPU only via `onnxruntime`. Recommended engine for the site. |
 | `ClassicalRecognizer` | `classical` | Pure OpenCV: MOG2 blobs, plate-guided splitting of merged blobs, a white/yellow plate finder, and template OCR against Hershey glyphs. **It is only good enough for the synthetic replay videos.** |
 
-Training: `tools/label_crops.py` labels crops, `tools/train_ocr.py` trains
+Training our own models: section 9. For the `onnx` engine: `tools/label_crops.py` labels crops, `tools/train_ocr.py` trains
 the CRNN+CTC model and exports the ONNX the service expects, and
 `tools/train_detector.md` covers the detector.
 
@@ -297,7 +298,9 @@ The full procedure belongs in `docs/CAMERA_SETUP.md`. The key numbers:
 | PyYAML | MIT | config | OK |
 | ONNX Runtime / onnxruntime-gpu | MIT | inference | OK. CUDA, cuDNN and TensorRT libraries are under the **NVIDIA EULA**: redistribution is allowed only as the EULA permits, which is fine inside the `nvidia/cuda` base image. |
 | `nvidia/cuda` base image | NVIDIA Deep Learning Container licence | Docker base | OK for deployment on NVIDIA GPUs; review before redistributing images |
-| PyTorch (training only) | BSD-3-Clause | `tools/train_ocr.py` | OK |
+| PyTorch (training only) | BSD-3-Clause | `training/`, `tools/train_ocr.py` | OK |
+| Our plate models (`models/plate_*.onnx`) | project licence | `trained` engine | Trained only on images we generate; no third-party dataset or pre-trained weights |
+| Fonts used to render training plates (DejaVu, Liberation, GNU FreeFont) | Bitstream Vera / OFL / GPL-with-font-exception | training images only | Not shipped; rendered glyphs in a model are not a copy of the font |
 | **Ultralytics YOLOv5 / YOLOv8 / YOLO11** | **AGPL-3.0** | (alternative detector) | **Needs an Ultralytics Enterprise licence** for a closed or commercial deployment. Otherwise the whole service must be released under AGPL. Not used by default. |
 | YOLOX (Megvii) | Apache-2.0 | recommended detector | OK |
 | RT-DETR (lyuwenyu / PaddleDetection) | Apache-2.0 | alternative detector | OK |
@@ -311,6 +314,9 @@ The full procedure belongs in `docs/CAMERA_SETUP.md`. The key numbers:
 
 ## 8. Assumptions and limitations
 
+* **The trained engine has only seen computer-generated plates** until the
+  site week (section 9). Expect it to be noticeably weaker than the 95% / 90%
+  target on real footage at first; the week of site crops closes the gap.
 * **The classical engine is a demo engine.** It reads the synthetic videos,
   which use flat colours, a static background and Hershey-font plates, at
   100%. On real footage it will fail: headlights, shadows and real fonts
@@ -329,3 +335,83 @@ The full procedure belongs in `docs/CAMERA_SETUP.md`. The key numbers:
 * Late reads within the merge window after an event has been sent are folded
   in (logged and counted) but not re-posted. The backend contract has no
   "update event" call, so the late camera's images are not attached.
+
+## 9. Our own plate models (trained on computer-generated images)
+
+No commercial recogniser and no downloaded dataset: `anpr/training/` draws
+Indian number plates itself and trains two small networks on them.
+
+**What the generator draws** (`training/platesynth.py`): standard
+`SS 00 X(X) 0000` and BH-series plates weighted towards Maharashtra; HSRP
+(IND strip, hologram, border), old-style, commercial yellow, EV green and
+rental black plates; one-row and two-row (bike) layouts; several typefaces;
+rivets, frames, dealer stickers. Then it damages them the way a gate camera
+does: perspective and tilt, loose or clipped crops, dirt and mud, faded paint,
+low/high exposure, headlight glare, IR night (grey, noisy), motion and focus
+blur, sensor noise, JPEG artefacts, part of the plate hidden. The finder's
+scenes add mudguards, tail lights and decoy text (brand names, stickers)
+that are *not* plates.
+
+| Model | File | What it does | Size |
+|---|---|---|---|
+| Plate finder | `models/plate_finder.onnx` | CenterNet-style heatmap over the whole frame (scaled to `finder_width`, default 960 px): plate centre, width, height | ~0.2 M params |
+| Plate reader | `models/plate_reader.onnx` | 64×128 grey crop → 11 character slots × (0–9, A–Z, empty). Reads one- and two-row plates in one pass; per-character confidence and top-3 alternatives feed the pipeline's multi-frame voting | ~1.25 M params |
+
+Each `.onnx` has a `.json` next to it with the alphabet and the validation
+scores it reached on held-out generated images.
+
+**Select it**: `recognizer.kind: trained` (or `ANPR_RECOGNIZER=trained`).
+Options under `recognizer.trained`: `finder_model`, `reader_model` (relative
+paths resolve against `anpr/`), `finder_width`, `finder_threshold`,
+`whole_frame_plates`, `threads`.
+
+### 9.1 Re-training from scratch (any Linux PC, no GPU needed)
+
+```bash
+cd anpr
+sudo apt install fonts-dejavu-core fonts-liberation fonts-freefont-ttf
+pip install -r requirements-train.txt
+python -m training.platesynth                       # writes preview sheets to look at
+python -m training.train_reader gen   --out training/data --train 240000 --val 6000
+python -m training.train_reader train --data training/data --epochs 10 --out training/runs/reader
+python -m training.train_reader export --ckpt training/runs/reader/best.pt --out models/plate_reader.onnx
+python -m training.train_finder gen   --out training/data_finder --train 40000 --val 1500
+python -m training.train_finder train --data training/data_finder --epochs 10 --out training/runs/finder
+python -m training.train_finder export --ckpt training/runs/finder/best.pt --out models/plate_finder.onnx
+python -m training.train_reader eval  --model models/plate_reader.onnx --data training/data
+```
+
+On a 4-core CPU: data ~25 min, reader ~3 h, finder ~2 h.
+
+### 9.2 The site week: making it accurate on your cameras
+
+The models are good at *generated* plates. Real plates differ in ways a
+generator never fully captures (your cameras' exact blur, your lighting, the
+local mix of fonts and dirt). One week of real footage fixes most of it:
+
+1. **Install and run.** Cameras mounted and aimed per `CAMERA_SETUP.md`,
+   `recognizer.kind: trained`. The system runs normally; workers correct
+   misreads in the app as they happen.
+2. **Collect crops.** Every event saves a plate crop under the image root
+   (`/srv/images/<date>/<gate>/<event>_plate_crop.jpg`). Copy a week's worth:
+   ```bash
+   mkdir -p ~/crops && find /srv/images -name '*plate_crop.jpg' -newermt '-7 days' -exec cp {} ~/crops/ \;
+   ```
+3. **Label.** The model pre-labels every crop; a person only fixes the wrong
+   ones (about 2–3 seconds per crop; 3,000 crops ≈ 2 hours):
+   ```bash
+   python tools/label_crops.py ~/crops --suggest --config /srv/anpr/site.yaml   # needs a desktop; Delete = unusable
+   ```
+4. **Fine-tune the reader** (about 30–60 minutes on the edge server's CPU):
+   ```bash
+   python -m training.train_reader train --data training/data --real ~/crops/labels.csv --real-dir ~/crops \
+       --init training/runs/reader/best.pt --epochs 6 --lr 5e-4 --out training/runs/reader_site
+   python -m training.train_reader export --ckpt training/runs/reader_site/best.pt --out models/plate_reader.onnx
+   ```
+   Keep ~300 labelled crops aside and check them with
+   `python -m anpr_service evaluate` (section 5) before and after.
+5. **Deploy**: copy the new `plate_reader.onnx` + `.json` into `anpr/models/`
+   and `docker compose up -d --build anpr`. Keep the previous file to roll back.
+
+Repeat step 2–5 after a month (and after the first monsoon week) with the
+crops the reader was least sure about.
