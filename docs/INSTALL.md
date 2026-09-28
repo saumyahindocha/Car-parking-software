@@ -157,9 +157,9 @@ Notes:
 3. Put the RTSP URLs in Dashboard → Configuration → Cameras (or `deploy/config/site.yaml`), set the
    ROI, capture line and IN vector, and `gate_span` (fraction of the gate width each camera covers,
    used to merge unread detections) in `site.yaml`.
-4. Load recognition models: copy the ONNX detector/OCR models to `/srv/parking/models` and select
-   the engine in `site.yaml` (`onnx`, or `platerecognizer` with an API key) — see
-   [ANPR.md](ANPR.md). Restart: `docker compose restart anpr`.
+4. Plate recognition: our own models ship with the software (`recognizer.kind: trained`, the default
+   in `site.yaml`) — nothing to download, no API key. After the first week, fine-tune the reader on
+   your own cameras' plate crops ([ANPR.md](ANPR.md) §9.2). Restart after changes: `docker compose restart anpr`.
 5. Pilot one gate for two weeks; measure read rate with `python -m anpr_service evaluate` on labelled
    clips and on the dashboard's ANPR accuracy report (targets: ≥ 95 % day, ≥ 90 % night).
 
