@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
+  <meta name="googlebot" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#eaf3fb">
+  <meta name="color-scheme" content="light">
+  <meta name="format-detection" content="telephone=no, date=no">
+  <title>for RaRa 🤍</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🤍%3C/text%3E%3C/svg%3E">
+  <link rel="preload" href="assets/fonts/cormorant-garamond-latin-500-italic.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/fonts/caveat-latin-500-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="is-locked">
+
+  <!-- Shared gradients for every lily on the page (kept rendered, never display:none) -->
+  <svg id="defs" width="0" height="0" aria-hidden="true" focusable="false">
+    <defs>
+      <radialGradient id="lilyPetal" cx="50" cy="52" r="48" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="#f2b9bc"/>
+        <stop offset=".22" stop-color="#fbe4e1"/>
+        <stop offset=".55" stop-color="#fffdfa"/>
+        <stop offset=".88" stop-color="#ffffff"/>
+        <stop offset="1" stop-color="#d9e9f7"/>
+      </radialGradient>
+      <linearGradient id="lilyEdge" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#c9ddef"/>
+        <stop offset="1" stop-color="#f0dcd6"/>
+      </linearGradient>
+      <radialGradient id="lilyGlow" cx=".5" cy=".5" r=".5">
+        <stop offset="0" stop-color="#ffffff" stop-opacity=".9"/>
+        <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+      </radialGradient>
+      <linearGradient id="lilyPetal2" x1="0" y1="1" x2="0" y2="0">
+        <stop offset="0" stop-color="#f7d3d3"/>
+        <stop offset=".45" stop-color="#fffaf6"/>
+        <stop offset="1" stop-color="#e3eef9"/>
+      </linearGradient>
+      <linearGradient id="leaf" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#c8dbb6"/>
+        <stop offset="1" stop-color="#9ebc8c"/>
+      </linearGradient>
+      <linearGradient id="bud" x1="0" y1="1" x2="0" y2="0">
+        <stop offset="0" stop-color="#d7e5c4"/>
+        <stop offset=".6" stop-color="#fbf4ea"/>
+        <stop offset="1" stop-color="#f6dada"/>
+      </linearGradient>
+      <linearGradient id="flame" x1="0" y1="1" x2="0" y2="0">
+        <stop offset="0" stop-color="#f59a4a"/>
+        <stop offset=".6" stop-color="#ffd27a"/>
+        <stop offset="1" stop-color="#fff2c4"/>
+      </linearGradient>
+      <linearGradient id="clay" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#d0625f"/>
+        <stop offset="1" stop-color="#a8403f"/>
+      </linearGradient>
+    </defs>
+  </svg>
+
+  <!-- 1. Countdown lock screen -->
+  <section id="countdown" class="screen" hidden aria-live="polite"></section>
+
+  <!-- 2. Password gate -->
+  <section id="gate" class="screen" hidden></section>
+
+  <!-- Bloom transition after unlocking -->
+  <div id="bloom" class="bloom" aria-hidden="true"></div>
+
+  <!-- Drifting petals layer -->
+  <div id="petals" class="petals" aria-hidden="true"></div>
+
+  <!-- The site -->
+  <main id="site" hidden>
+    <section id="opening"  class="section opening"  data-song="main"></section>
+    <section id="story"    class="section story"    data-song="main"></section>
+    <section id="now"      class="section gallery"  data-song="main"></section>
+    <section id="little"   class="section gallery little" data-song="main"></section>
+    <section id="bloopers" class="section bloopers" data-song="main"></section>
+    <section id="reasons"  class="section reasons"  data-song="main"></section>
+    <section id="openwhen" class="section openwhen" data-song="main"></section>
+    <section id="letter"   class="section letter"   data-song="letter"></section>
+    <section id="navratri" class="section navratri" data-song="letter"></section>
+    <section id="wish"     class="section wish"     data-song="letter"></section>
+    <section id="finale"   class="section finale"   data-song="none"></section>
+  </main>
+
+  <!-- Overlays -->
+  <div id="lightbox" class="overlay lightbox" hidden role="dialog" aria-modal="true" aria-label="Photo"></div>
+  <div id="sheet" class="overlay sheet" hidden role="dialog" aria-modal="true"></div>
+
+  <!-- Music controls -->
+  <button id="mute" class="mute" type="button" hidden aria-pressed="false"></button>
+  <div id="toast" class="toast" aria-live="polite"></div>
+
+  <audio id="audio-main" preload="auto" loop playsinline></audio>
+  <audio id="audio-letter" preload="auto" loop playsinline></audio>
+  <audio id="audio-voice" preload="auto" playsinline></audio>
+
+  <script src="js/content.js"></script>
+  <script src="assets/photos/manifest.js"></script>
+  <script src="js/lilies.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

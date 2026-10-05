@@ -1,0 +1,13 @@
+{
+  "name": "rara-tools",
+  "private": true,
+  "type": "module",
+  "description": "Local helpers for the birthday site (not deployed).",
+  "scripts": {
+    "photos": "node optimize-photos.mjs",
+    "dev": "node serve.mjs"
+  },
+  "devDependencies": {
+    "sharp": "^0.34.0"
+  }
+}
