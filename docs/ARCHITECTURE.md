@@ -9,7 +9,7 @@ differences are carried to the next visit. Monthly-pass holders pass with zero i
 
 ```
                        ┌──────────────────────────── site LAN (192.168.10.0/24) ───────────────────────────┐
-  4× ANPR cam  ─RTSP─┐ │  EDGE SERVER (Ubuntu 24.04, GPU, UPS)                                             │
+  4× ANPR cam  ─RTSP─┐ │  EDGE SERVER (Ubuntu 24.04, UPS; GPU optional)                                    │
   2× overview  ─RTSP─┤ │  ┌───────────────┐  events   ┌──────────────────────────────┐   ┌──────────────┐  │
                      └─┼─►│ anpr (Python) │──HTTP────►│ backend (FastAPI, 1 process) │◄─►│ PostgreSQL 16│  │
                        │  │ per-camera    │  JPEGs    │  REST + WebSocket hub        │   └──────────────┘  │
