@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t('pay_title') }}</h1>
+<div class="card">
+  {% if entry.thumb_b64 %}<img class="thumb" src="/t/{{ entry.session_id }}.jpg" alt="" width="200" height="100">{% endif %}
+  <p class="plate big">{{ plate_shown }}</p>
+  <p class="meta">{{ t('entered') }} {{ localtime(entry.entry_at) }}</p>
+</div>
+{% if already_paid %}
+<p class="ok" role="status">{{ t('already_paid') }}</p>
+{% elif options %}
+<form method="post" action="/pay/start">
+  <input type="hidden" name="{{ csrf_field }}" value="{{ csrf }}">
+  <input type="hidden" name="sid" value="{{ entry.session_id }}">
+  <input type="hidden" name="reveal" value="{{ reveal }}">
+  <fieldset class="durations">
+    <legend>{{ t('choose_duration') }}</legend>
+    {% for mins, amount in options %}
+    <label class="opt"><input type="radio" name="duration" value="{{ mins }}" required{% if loop.first %} checked{% endif %}>
+      <span>{{ dur(mins) }}</span><b>{{ rupees(amount) }}</b></label>
+    {% endfor %}
+  </fieldset>
+  {% if dues > 0 %}<p class="meta">{{ t('includes_dues', amount=rupees(dues)) }}</p>{% endif %}
+  <button type="submit" class="primary">{{ t('pay_upi') }}</button>
+</form>
+{% else %}
+<p>{{ t('nothing_to_pay') }}</p>
+{% endif %}
+<p><a href="/pay">&larr; {{ t('pay_title') }}</a></p>
+{% endblock %}

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t('pay_title') }}</h1>
+{% if candidates %}
+<p>{{ t('did_you_mean') }}</p>
+<ul class="vehicles">
+{% for e in candidates %}
+  <li><a class="veh" href="/pay/s/{{ e.session_id }}">
+    {% if e.thumb_b64 %}<img src="/t/{{ e.session_id }}.jpg" alt="" width="120" height="60" loading="lazy">{% else %}<span class="nothumb" aria-hidden="true"></span>{% endif %}
+    <span class="plate masked">{{ e.masked_plate }}</span>
+    <span class="meta">{{ t('entered') }} {{ localtime(e.entry_at, '%I:%M %p') }}</span></a></li>
+{% endfor %}
+</ul>
+{% else %}
+<p class="warn" role="status">{{ t('not_found', plate=typed) }}</p>
+{% endif %}
+{% set typed = '' %}
+{% include "_search.html" %}
+<p><a href="/pay">&larr; {{ t('pay_title') }}</a></p>
+{% endblock %}

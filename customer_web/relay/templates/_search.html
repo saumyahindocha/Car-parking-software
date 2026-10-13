@@ -1,0 +1,9 @@
+<form class="search" method="post" action="/pay/find" autocomplete="off">
+  <input type="hidden" name="{{ csrf_field }}" value="{{ csrf }}">
+  <label for="plate">{{ t('type_plate') }}</label>
+  <div class="row">
+    <input id="plate" name="plate" inputmode="text" autocapitalize="characters" spellcheck="false" maxlength="14"
+           placeholder="{{ t('plate_ph') }}" value="{{ typed or '' }}" required>
+    <button type="submit">{{ t('find') }}</button>
+  </div>
+</form>

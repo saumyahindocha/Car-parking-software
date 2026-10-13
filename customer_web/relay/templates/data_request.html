@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t('data_request_title') }}</h1>
+<p class="plate big">{{ plate_shown }}</p>
+<form method="post" action="/privacy/request">
+  <input type="hidden" name="{{ csrf_field }}" value="{{ csrf }}">
+  <fieldset><legend>{{ t('request_type') }}</legend>
+    <label class="opt"><input type="radio" name="type" value="ACCESS" checked> <span>{{ t('req_access') }}</span></label>
+    <label class="opt"><input type="radio" name="type" value="CORRECT"> <span>{{ t('req_correct') }}</span></label>
+    <label class="opt"><input type="radio" name="type" value="DELETE"> <span>{{ t('req_delete') }}</span></label>
+    <label class="opt"><input type="radio" name="type" value="WITHDRAW_CONSENT"> <span>{{ t('req_withdraw') }}</span></label>
+  </fieldset>
+  <label for="note">{{ t('note') }}</label>
+  <textarea id="note" name="note" rows="3" maxlength="1000"></textarea>
+  <button type="submit" class="primary">{{ t('submit') }}</button>
+</form>
+{% endblock %}

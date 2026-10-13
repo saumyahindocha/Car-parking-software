@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t('receipt_missing_title') }}</h1>
+<p>{{ t('receipt_missing') }}</p>
+<a class="button primary" href="/r/{{ code }}">{{ t('try_again') }}</a>
+{% endblock %}

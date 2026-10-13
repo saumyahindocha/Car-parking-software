@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t('pay_upi') }}</h1>
+<div class="card center" id="payment" data-status-url="/pay/i/{{ intent.token }}/status">
+  <p class="meta">{{ t('vehicle') }}: <span class="plate">{{ plate_shown }}</span></p>
+  <p class="amount">{{ rupees(intent.amount_paise) }}</p>
+  {% if qr %}{{ qr | safe }}{% elif intent.qr_image_url %}<img class="qr" src="{{ intent.qr_image_url }}" alt="UPI QR code" width="260" height="260">{% endif %}
+  <p>{{ t('scan_qr') }}</p>
+  {% if intent.upi_uri %}<a class="button primary upi-app" href="{{ intent.upi_uri }}">{{ t('open_upi') }}</a>{% endif %}
+  <p class="waiting" role="status" aria-live="polite">{{ t('waiting') }}</p>
+  <a class="button" href="/pay/i/{{ intent.token }}">{{ t('check_again') }}</a>
+</div>
+{% if show_demo %}
+<form method="post" action="/pay/i/{{ intent.token }}/demo-pay" class="demo">
+  <input type="hidden" name="{{ csrf_field }}" value="{{ csrf }}">
+  <button type="submit">{{ t('simulate_paid') }}</button>
+</form>
+{% endif %}
+{% endblock %}

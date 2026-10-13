@@ -1,0 +1,9 @@
+**/node_modules
+**/dist
+**/__pycache__
+**/.pytest_cache
+**/*.db
+**/data
+worker_app/build
+worker_app/.dart_tool
+.git

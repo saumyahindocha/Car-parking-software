@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block content %}
+<h1{% if ok %} class="ok-title"{% endif %}>{{ t(title_key or 'error') }}</h1>
+<p{% if not ok %} role="alert"{% endif %}>{% if message_key %}{{ t(message_key) }}{% else %}{{ message }}{% endif %}</p>
+{% if back %}<a class="button" href="{{ back }}">&larr; {{ t('back_home') if back == '/' else 'Back' }}</a>{% endif %}
+{% endblock %}

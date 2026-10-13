@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t('pass_title') }}</h1>
+<p class="plate big">{{ plate_shown }}</p>
+{% if current %}<p class="ok">{{ t('current_pass', date=current.ends_on) }}</p>{% endif %}
+{% if types %}
+<h2>{{ t('choose_pass') }}</h2>
+<ul class="passes">
+{% for pt in types %}
+  <li class="card">
+    <form method="post" action="/pass/pay">
+      <input type="hidden" name="{{ csrf_field }}" value="{{ csrf }}">
+      <input type="hidden" name="pass_type_id" value="{{ pt.id }}">
+      <p><strong>{{ pt.name }}</strong>{% if not vehicle %} · {{ t(pt.vehicle_class | lower) }}{% endif %}</p>
+      <button type="submit" class="primary">{{ t('buy_for', amount=rupees(pt.price_paise)) }}</button>
+    </form>
+  </li>
+{% endfor %}
+</ul>
+<p class="meta">{{ t('pass_activates') }}</p>
+{% else %}
+<p>{{ t('no_pass_types') }}</p>
+{% endif %}
+{% endblock %}
